@@ -218,6 +218,7 @@
     <module>server</module>
     <module>test-lib</module>
     <module>integration-test</module>
+    <module>thriftserver</module>
   </modules>
 
   <dependencies>

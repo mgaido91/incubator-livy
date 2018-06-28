@@ -1,0 +1,10 @@
+
+Thrift commands to generate files from TCLIService.thrift:
+--------------------
+If you have Thrift >= 0.10.0
+
+thrift --gen java:beans,generated_annotations=undated -o src/gen if/TCLIService.thrift
+
+Otherwise
+
+thrift --gen java:beans,hashcode,generated_annotations=undated -o src/gen if/TCLIService.thrift
