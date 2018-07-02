@@ -218,7 +218,6 @@
     <module>server</module>
     <module>test-lib</module>
     <module>integration-test</module>
-    <module>thriftserver</module>
   </modules>
 
   <dependencies>
@@ -1078,6 +1077,12 @@
   </distributionManagement>
 
   <profiles>
+    <profile>
+      <id>thriftserver</id>
+      <modules>
+        <module>thriftserver</module>
+      </modules>
+    </profile>
     <!-- Spark version profile -->
     <profile>
       <id>spark-1.6</id>
