@@ -146,7 +146,7 @@ public class HiveCommandOperation extends ExecuteStatementOperation {
     setState(OperationState.CLOSED);
     tearDownSessionIO();
     cleanTmpFile();
-    cleanupOperationLog(0);
+    cleanupOperationLog();
   }
 
   /* (non-Javadoc)
