@@ -63,7 +63,7 @@ object LivyConf {
   val SERVER_PORT = Entry("livy.server.port", 8998)
   val SERVER_BASE_PATH = Entry("livy.ui.basePath", "")
 
-  val THRIFT_SERVER_ENABLED = Entry("livy.server.thrift.enabled", true)
+  val THRIFT_SERVER_ENABLED = Entry("livy.server.thrift.enabled", false)
 
   val UI_ENABLED = Entry("livy.ui.enabled", true)
 
