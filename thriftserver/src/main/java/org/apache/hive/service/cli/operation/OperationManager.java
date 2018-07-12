@@ -58,7 +58,7 @@ import org.slf4j.LoggerFactory;
  */
 public class OperationManager extends AbstractService {
   private final Logger LOG = LoggerFactory.getLogger(OperationManager.class.getName());
-  private final ConcurrentHashMap<OperationHandle, Operation> handleToOperation =
+  protected final ConcurrentHashMap<OperationHandle, Operation> handleToOperation =
       new ConcurrentHashMap<OperationHandle, Operation>();
   private final ConcurrentHashMap<String, Operation> queryIdOperation =
       new ConcurrentHashMap<String, Operation>();
@@ -189,7 +189,7 @@ public class OperationManager extends AbstractService {
     return operation.getParentSession().getHiveConf().getVar(ConfVars.HIVEQUERYID);
   }
 
-  private void addOperation(Operation operation) {
+  protected void addOperation(Operation operation) {
     LOG.info("Adding operation: " + operation.getHandle());
     queryIdOperation.put(getQueryId(operation), operation);
     handleToOperation.put(operation.getHandle(), operation);

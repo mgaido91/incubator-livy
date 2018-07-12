@@ -17,17 +17,11 @@
 
 package org.apache.livy.thriftserver
 
-import org.apache.livy.Logging
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hive.service.cli.CLIService
 
-/**
- * The main entry point for the Livy thrift server leveraging HiveServer2. Starts up a
- * `HiveThriftServer2` thrift server.
- */
-object LivyThriftserver extends Logging {
-
-}
-
-
-class LivyThriftserver {
-
+class LivyCLIService(server: LivyThriftServer) extends CLIService(server) {
+  override def init(hiveConf: HiveConf): Unit = {
+    super.init(hiveConf, new LivyThriftSessionManager(server))
+  }
 }

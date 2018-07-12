@@ -24,7 +24,6 @@ import javax.servlet._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-
 import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hadoop.security.authentication.server._
 import org.eclipse.jetty.servlet.FilterHolder
@@ -32,13 +31,12 @@ import org.scalatra.{NotFound, ScalatraServlet}
 import org.scalatra.metrics.MetricsBootstrap
 import org.scalatra.metrics.MetricsSupportExtensions._
 import org.scalatra.servlet.{MultipartConfig, ServletApiImplicits}
-
 import org.apache.livy._
 import org.apache.livy.server.batch.BatchSessionServlet
 import org.apache.livy.server.interactive.InteractiveSessionServlet
 import org.apache.livy.server.recovery.{SessionStore, StateStore}
 import org.apache.livy.server.ui.UIServlet
-import org.apache.livy.sessions.{BatchSessionManager, InteractiveSessionManager}
+import org.apache.livy.sessions.{BatchSessionManager, InteractiveSessionManager, SessionManager}
 import org.apache.livy.sessions.SessionManager.SESSION_RECOVERY_MODE_OFF
 import org.apache.livy.utils.LivySparkUtils._
 import org.apache.livy.utils.SparkYarnApp
@@ -265,6 +263,14 @@ class LivyServer extends Logging {
         server.stop()
       }
     })
+
+    if (livyConf.getBoolean(LivyConf.THRIFT_SERVER_ENABLED)) {
+      val thriftserverObj = Class.forName("org.apache.livy.thriftserver.LivyThriftServer$")
+        .getField("MODULE$").get(null)
+      thriftserverObj.getClass.getMethod(
+          "start", classOf[LivyConf], classOf[InteractiveSessionManager], classOf[SessionStore])
+        .invoke(thriftserverObj, livyConf, interactiveSessionManager, sessionStore)
+    }
 
     _serverUrl = Some(s"${server.protocol}://${server.host}:${server.port}")
     sys.props("livy.server.server-url") = _serverUrl.get

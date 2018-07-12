@@ -53,17 +53,24 @@ import org.slf4j.LoggerFactory;
 public class HiveServer2 extends CompositeService {
   private static final Logger LOG = LoggerFactory.getLogger(HiveServer2.class);
   public static final String INSTANCE_URI_CONFIG = "hive.server2.instance.uri";
-  private CLIService cliService;
-  private ThriftCLIService thriftCLIService;
+  protected CLIService cliService;
+  protected ThriftCLIService thriftCLIService;
 
   public HiveServer2() {
     super(HiveServer2.class.getSimpleName());
     HiveConf.setLoadHiveServer2Config(true);
   }
 
+  public void init(HiveConf hiveConf, CLIService cliService) {
+    this.cliService = cliService;
+    init(hiveConf);
+  }
+
   @Override
   public synchronized void init(HiveConf hiveConf) {
-    cliService = new CLIService(this);
+    if (cliService == null) {
+      cliService = new CLIService(this);
+    }
     addService(cliService);
     final HiveServer2 hiveServer2 = this;
     Runnable oomHook = new Runnable() {
@@ -222,14 +229,14 @@ public class HiveServer2 extends CompositeService {
    * Create an appropriate response object,
    * which has executor to execute the appropriate command based on the parsed options.
    */
-  static class ServerOptionsProcessor {
+  public static class ServerOptionsProcessor {
     private final Options options = new Options();
     private org.apache.commons.cli.CommandLine commandLine;
     private final String serverName;
     private final StringBuilder debugMessage = new StringBuilder();
 
     @SuppressWarnings("static-access")
-    ServerOptionsProcessor(String serverName) {
+    public ServerOptionsProcessor(String serverName) {
       this.serverName = serverName;
       // -hiveconf x=y
       options.addOption(OptionBuilder
@@ -242,7 +249,7 @@ public class HiveServer2 extends CompositeService {
       options.addOption(new Option("H", "help", false, "Print help information"));
     }
 
-    ServerOptionsProcessorResponse parse(String[] argv) {
+    public ServerOptionsProcessorResponse parse(String[] argv) {
       try {
         commandLine = new GnuParser().parse(options, argv);
         // Process --hiveconf

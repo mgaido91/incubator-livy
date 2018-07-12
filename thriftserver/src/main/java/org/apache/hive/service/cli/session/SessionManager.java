@@ -70,7 +70,7 @@ public class SessionManager extends CompositeService {
   private int userLimit;
   private int ipAddressLimit;
   private int userIpAddressLimit;
-  private final OperationManager operationManager = new OperationManager();
+  protected OperationManager operationManager;
   private ThreadPoolExecutor backgroundOperationPool;
   private boolean isOperationLogEnabled;
   private File operationLogRootDir;

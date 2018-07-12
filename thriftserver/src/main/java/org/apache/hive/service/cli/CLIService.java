@@ -78,10 +78,17 @@ public class CLIService extends CompositeService implements ICLIService {
     this.hiveServer2 = hiveServer2;
   }
 
+  public void init(HiveConf hiveConf, SessionManager sessionManager) {
+    this.sessionManager = sessionManager;
+    init(hiveConf);
+  }
+
   @Override
   public synchronized void init(HiveConf hiveConf) {
     setHiveConf(hiveConf);
-    sessionManager = new SessionManager(hiveServer2);
+    if (sessionManager == null) {
+      sessionManager = new SessionManager(hiveServer2);
+    }
     defaultFetchRows = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_DEFAULT_FETCH_SIZE);
     addService(sessionManager);
     //  If the hadoop cluster is secure, do a kerberos login for the service from the keytab
