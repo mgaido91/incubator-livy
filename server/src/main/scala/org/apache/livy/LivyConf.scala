@@ -64,6 +64,7 @@ object LivyConf {
   val SERVER_BASE_PATH = Entry("livy.ui.basePath", "")
 
   val THRIFT_SERVER_ENABLED = Entry("livy.server.thrift.enabled", false)
+  val THRIFT_INCR_COLLECT_ENABLED = Entry("livy.server.thrift.incrementalCollect", false)
 
   val UI_ENABLED = Entry("livy.ui.enabled", true)
 

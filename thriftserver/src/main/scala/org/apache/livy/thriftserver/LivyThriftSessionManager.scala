@@ -18,7 +18,7 @@
 package org.apache.livy.thriftserver
 
 import java.util.concurrent.ConcurrentHashMap
-import java.util.{Map => JMap}
+import java.util.{Collections => JCollections, Map => JMap}
 
 import scala.collection.JavaConverters._
 import org.apache.livy.Logging
@@ -28,11 +28,12 @@ import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.rpc.thrift.TProtocolVersion
 import org.apache.livy.server.interactive.{CreateInteractiveRequest, InteractiveSession}
 import org.apache.livy.sessions.Spark
+import org.apache.livy.thriftserver.rpc.RpcClient
 
 import scala.collection.mutable
-import scala.util.Try
+import scala.util.{Try, Failure}
 
-class LivyThriftSessionManager(server: LivyThriftServer)
+class LivyThriftSessionManager(val server: LivyThriftServer)
   extends SessionManager(server) with Logging {
   private val sessionHandleToLivySession =
     new ConcurrentHashMap[SessionHandle, InteractiveSession]()
@@ -50,7 +51,7 @@ class LivyThriftSessionManager(server: LivyThriftServer)
     }
   }
 
-  def onUserSessionClosed(livySession: InteractiveSession): Unit = {
+  def onUserSessionClosed(sessionHandle: SessionHandle, livySession: InteractiveSession): Unit = {
     val closeSession = managedLivySessionActiveUsers.synchronized[Boolean] {
       val activeUsers = managedLivySessionActiveUsers(livySession.id)
       if (activeUsers == 1) {
@@ -64,6 +65,14 @@ class LivyThriftSessionManager(server: LivyThriftServer)
     }
     if (closeSession) {
       livySession.stopSession()
+    } else {
+      // We unregister the session only if we don't close it, as it is unnecessary in that case
+      val rpcClient = new RpcClient(livySession)
+      try {
+        rpcClient.executeUnregisterSession(sessionHandle)
+      } catch {
+        case e: Exception => warn(s"Unable to unregister session $sessionHandle", e)
+      }
     }
   }
 
@@ -98,6 +107,28 @@ class LivyThriftSessionManager(server: LivyThriftServer)
     }
   }
 
+  private def initSession(sessionHandle: SessionHandle, initStatements: List[String]): Unit = {
+    val livySession = sessionHandleToLivySession.get(sessionHandle)
+    val rpcClient = new RpcClient(livySession)
+    rpcClient.executeRegisterSession(sessionHandle)
+    val hiveSession = getSession(sessionHandle)
+    initStatements.foreach { statement =>
+      val operation = operationManager.newExecuteStatementOperation(
+        hiveSession,
+        statement,
+        JCollections.emptyMap(),
+        false,
+        0)
+      try {
+        operation.run()
+      } catch {
+        case e: Exception => warn(s"Unable to run: $statement", e)
+      } finally {
+        operationManager.closeOperation(operation.getHandle)
+      }
+    }
+  }
+
   override def openSession(
       protocol: TProtocolVersion,
       username: String,
@@ -124,15 +155,22 @@ class LivyThriftSessionManager(server: LivyThriftServer)
     }
     val livySession = getOrCreateLivySession(sessionHandle, sessionId, username, createLivySession)
     sessionHandleToLivySession.put(sessionHandle, livySession)
+    Try(initSession(sessionHandle, initStatements)) match {
+      case Failure(e) =>
+        warn(s"Init session $sessionHandle failed.", e)
+        Try(closeSession(sessionHandle)).failed.foreach { e =>
+          warn(s"Closing session $sessionHandle failed.", e)
+        }
+      case _ => // do nothing
+    }
     sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle): Unit = {
     super.closeSession(sessionHandle)
     val removedSession = sessionHandleToLivySession.remove(sessionHandle)
-    onUserSessionClosed(removedSession)
+    onUserSessionClosed(sessionHandle, removedSession)
   }
-
 }
 
 object LivyThriftSessionManager extends Logging {

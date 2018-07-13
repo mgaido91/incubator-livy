@@ -28,6 +28,8 @@ import org.apache.livy.sessions.InteractiveSessionManager
  * `HiveThriftServer2` thrift server.
  */
 object LivyThriftServer extends Logging {
+
+  val INCR_COLLECT_ENABLED_WITHPREFIX = s"spark.${LivyConf.THRIFT_INCR_COLLECT_ENABLED}"
   /*
   def main(args: Array[String]) {
 

@@ -24,6 +24,7 @@ import javax.servlet._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
+
 import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hadoop.security.authentication.server._
 import org.eclipse.jetty.servlet.FilterHolder
@@ -31,12 +32,13 @@ import org.scalatra.{NotFound, ScalatraServlet}
 import org.scalatra.metrics.MetricsBootstrap
 import org.scalatra.metrics.MetricsSupportExtensions._
 import org.scalatra.servlet.{MultipartConfig, ServletApiImplicits}
+
 import org.apache.livy._
 import org.apache.livy.server.batch.BatchSessionServlet
 import org.apache.livy.server.interactive.InteractiveSessionServlet
 import org.apache.livy.server.recovery.{SessionStore, StateStore}
 import org.apache.livy.server.ui.UIServlet
-import org.apache.livy.sessions.{BatchSessionManager, InteractiveSessionManager, SessionManager}
+import org.apache.livy.sessions.{BatchSessionManager, InteractiveSessionManager}
 import org.apache.livy.sessions.SessionManager.SESSION_RECOVERY_MODE_OFF
 import org.apache.livy.utils.LivySparkUtils._
 import org.apache.livy.utils.SparkYarnApp

@@ -2,16 +2,16 @@ package org.apache.livy.thriftserver
 
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.RejectedExecutionException
-import java.util.{Arrays, UUID, Map => JMap}
+import java.util.{Arrays, Map => JMap}
 
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
-import org.apache.livy.{LivyConf, Logging}
+import org.apache.livy.Logging
 import org.apache.livy.server.interactive.InteractiveSession
 import org.apache.livy.thriftserver.rpc.RpcClient
-import org.apache.livy.utils.LivySparkUtils
+import org.apache.livy.thriftserver.utils.HiveTypes
 
 import scala.util.control.NonFatal
 
@@ -23,12 +23,9 @@ class LivyExecuteStatementOperation(
     livySession: InteractiveSession)
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
     with Logging {
-  private val (sparkMajorVersion, _) =
-    LivySparkUtils.formatSparkVersion(livySession.livyConf.get(LivyConf.LIVY_SPARK_VERSION))
+  private val rpcClient = new RpcClient(livySession)
 
-  private var statementId: String = _
-
-  val rpcClient = new RpcClient(livySession.client.get)
+  private def statementId: String = getHandle.getHandleIdentifier.toString
 
   override def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
     validateDefaultFetchOrientation(order)
@@ -72,14 +69,14 @@ class LivyExecuteStatementOperation(
             case e: Exception =>
               setOperationException(new HiveSQLException(e))
               error("Error running hive query as user : " +
-                livyServiceUGI.getShortUserName(), e)
+                livyServiceUGI.getShortUserName, e)
           }
         }
       }
       try {
         // This submit blocks if no background threads are available to run this operation
         val backgroundHandle =
-          parentSession.getSessionManager().submitBackgroundOperation(backgroundOperation)
+          parentSession.getSessionManager.submitBackgroundOperation(backgroundOperation)
         setBackgroundHandle(backgroundHandle)
       } catch {
         case rejected: RejectedExecutionException =>
@@ -95,31 +92,29 @@ class LivyExecuteStatementOperation(
   }
 
   protected def execute(): Unit = {
-    statementId = UUID.randomUUID().toString
-    info(s"Running query '$statement' with $statementId")
+    info(s"Running query '$statement' with id $statementId")
 
     setState(OperationState.RUNNING)
 
     try {
-      rpcClient.executeSql(statementId, statement).get()
+      rpcClient.executeSql(parentSession.getSessionHandle, statementId, statement).get()
     } catch {
       case e: Throwable =>
         val currentState = getStatus.getState
         error(s"Error executing query, currentState $currentState, ", e)
         setState(OperationState.ERROR)
-        throw new HiveSQLException(e.toString)
+        throw new HiveSQLException(e.getMessage)
     }
     setState(OperationState.FINISHED)
   }
 
   def close(): Unit = {
-    info(s"close '$statement' with $statementId")
+    info(s"Close $statementId")
     cleanup(OperationState.CLOSED)
-    rpcClient.closeOperation(statementId)
   }
 
   override def cancel(state: OperationState): Unit = {
-    info(s"Cancel '$statement' with $statementId and state $state")
+    info(s"Cancel $statementId with state $state")
     cleanup(state)
   }
 
@@ -129,7 +124,7 @@ class LivyExecuteStatementOperation(
 
   private def cleanup(state: OperationState) {
     if (statementId != null) {
-      rpcClient.cancelStatement(statementId)
+      rpcClient.cleanupStatement(statementId)
     }
     setState(state)
   }
