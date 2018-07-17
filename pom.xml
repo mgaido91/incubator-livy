@@ -106,6 +106,10 @@
     <scala.version>${scala-2.11.version}</scala.version>
     <scalatest.version>2.2.4</scalatest.version>
     <scalatra.version>2.3.0</scalatra.version>
+    <datanucleus-api-jdo.version>4.2.4</datanucleus-api-jdo.version>
+    <datanucleus-core.version>4.1.17</datanucleus-core.version>
+    <datanucleus-jdo.version>3.2.0-m3</datanucleus-jdo.version>
+    <datanucleus-rdbms.version>4.1.19</datanucleus-rdbms.version>
     <java.version>1.7</java.version>
     <minJavaVersion>1.7</minJavaVersion>
     <maxJavaVersion>1.8</maxJavaVersion>
