@@ -22,6 +22,7 @@ import org.apache.hive.service.cli.CLIService
 
 class LivyCLIService(server: LivyThriftServer) extends CLIService(server) {
   override def init(hiveConf: HiveConf): Unit = {
-    super.init(hiveConf, new LivyThriftSessionManager(server))
+    this.sessionManager = new LivyThriftSessionManager(server)
+    super.init(hiveConf)
   }
 }

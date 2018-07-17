@@ -61,11 +61,6 @@ public class HiveServer2 extends CompositeService {
     HiveConf.setLoadHiveServer2Config(true);
   }
 
-  public void init(HiveConf hiveConf, CLIService cliService) {
-    this.cliService = cliService;
-    init(hiveConf);
-  }
-
   @Override
   public synchronized void init(HiveConf hiveConf) {
     if (cliService == null) {

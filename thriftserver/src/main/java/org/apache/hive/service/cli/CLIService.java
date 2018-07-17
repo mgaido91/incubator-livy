@@ -66,7 +66,7 @@ public class CLIService extends CompositeService implements ICLIService {
 
   private final Logger LOG = LoggerFactory.getLogger(CLIService.class.getName());
 
-  private SessionManager sessionManager;
+  protected SessionManager sessionManager;
   private UserGroupInformation serviceUGI;
   private UserGroupInformation httpUGI;
   // The HiveServer2 instance running this service
@@ -76,11 +76,6 @@ public class CLIService extends CompositeService implements ICLIService {
   public CLIService(HiveServer2 hiveServer2) {
     super(CLIService.class.getSimpleName());
     this.hiveServer2 = hiveServer2;
-  }
-
-  public void init(HiveConf hiveConf, SessionManager sessionManager) {
-    this.sessionManager = sessionManager;
-    init(hiveConf);
   }
 
   @Override

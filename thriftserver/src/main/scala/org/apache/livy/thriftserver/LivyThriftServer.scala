@@ -31,6 +31,8 @@ import org.apache.livy.sessions.InteractiveSessionManager
 object LivyThriftServer extends Logging {
 
   val INCR_COLLECT_ENABLED_WITHPREFIX = s"spark.${LivyConf.THRIFT_INCR_COLLECT_ENABLED}"
+  private var thriftServerThread: Thread = _
+  private val thriftserverThreadGroup = new ThreadGroup("thriftserver")
   /*
   def main(args: Array[String]) {
 
@@ -55,17 +57,27 @@ object LivyThriftServer extends Logging {
   def start(
       livyConf: LivyConf,
       livySessionManager: InteractiveSessionManager,
-      sessionStore: SessionStore): Unit = {
-    info("Starting LivyThriftServer")
-
-    try {
-      val server = new LivyThriftServer(livyConf, livySessionManager, sessionStore)
-      server.init(new HiveConf())
-      server.start()
-      info("LivyThriftServer started")
-    } catch {
-      case e: Exception =>
-        error("Error starting LivyThriftServer", e)
+      sessionStore: SessionStore): Unit = synchronized {
+    if (thriftServerThread == null) {
+      info("Starting LivyThriftServer")
+      val runThriftServer = new Runnable {
+        override def run(): Unit = {
+          try {
+            val server = new LivyThriftServer(livyConf, livySessionManager, sessionStore)
+            server.init(new HiveConf())
+            server.start()
+            info("LivyThriftServer started")
+          } catch {
+            case e: Exception =>
+              error("Error starting LivyThriftServer", e)
+          }
+        }
+      }
+      thriftServerThread =
+        new Thread(thriftserverThreadGroup, runThriftServer, "Livy-Thriftserver")
+      thriftServerThread.start()
+    } else {
+      error("Livy Thriftserver is already started")
     }
   }
 }
@@ -76,6 +88,7 @@ class LivyThriftServer(
       private[thriftserver] val livySessionManager: InteractiveSessionManager,
       private[thriftserver] val sessionStore: SessionStore) extends HiveServer2 {
   override def init(hiveConf: HiveConf): Unit = {
-    super.init(hiveConf, new LivyCLIService(this))
+    this.cliService = new LivyCLIService(this)
+    super.init(hiveConf)
   }
 }
