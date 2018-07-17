@@ -19,6 +19,7 @@ package org.apache.livy.thriftserver
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.server.HiveServer2
+
 import org.apache.livy.{LivyConf, Logging}
 import org.apache.livy.server.recovery.SessionStore
 import org.apache.livy.sessions.InteractiveSessionManager
@@ -51,7 +52,10 @@ object LivyThriftServer extends Logging {
   }
   */
 
-  def start(livyConf: LivyConf, livySessionManager: InteractiveSessionManager, sessionStore: SessionStore) = {
+  def start(
+      livyConf: LivyConf,
+      livySessionManager: InteractiveSessionManager,
+      sessionStore: SessionStore): Unit = {
     info("Starting LivyThriftServer")
 
     try {

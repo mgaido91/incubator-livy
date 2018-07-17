@@ -73,6 +73,13 @@
             <artifactId>libthrift</artifactId>
             <version>0.9.3</version>
         </dependency>
+
+        <!-- needed for compiling successfully when using JobContext -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-hive_${scala.binary.version}</artifactId>
+            <scope>compile</scope>
+        </dependency>
     </dependencies>
     <build>
         <plugins>
@@ -93,6 +100,13 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <outputDirectory>${project.build.directory}/jars</outputDirectory>
+                </configuration>
             </plugin>
         </plugins>
     </build>

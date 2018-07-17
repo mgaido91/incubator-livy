@@ -21,6 +21,7 @@ import java.util.{Map => JMap}
 
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
+
 import org.apache.livy.Logging
 
 class LivyOperationManager(

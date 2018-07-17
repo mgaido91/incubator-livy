@@ -1,9 +1,27 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.livy.thriftserver.rpc
+
+import java.io._
 
 import com.esotericsoftware.kryo.io.{Input, Output}
 import org.apache.hadoop.io.Writable
 import org.apache.thrift.TByteArrayOutputStream
-import java.io._
 
 /**
  * Util methods for (de-) serialization
@@ -51,22 +69,23 @@ object RpcUtil {
     @throws[IOException]
     override def close(): Unit = remaining = 0
 
-    override def mark(readlimit: Int) = throw new UnsupportedOperationException("Mark/reset not supported")
+    override def mark(readlimit: Int): Unit =
+      throw new UnsupportedOperationException("Mark/reset not supported")
 
     @throws[IOException]
-    override def reset() = throw new IOException("Mark/reset not supported")
+    override def reset(): Unit = throw new IOException("Mark/reset not supported")
 
-    override def markSupported = false
+    override def markSupported: Boolean = false
 
     @throws[IOException]
     private[rpc] def drain() = {
       var retry = 0
-      while ( {
-        remaining > 0
-      }) {
+      while (remaining > 0) {
         val skipped = skip(remaining)
         if (skipped <= 0) {
-          if (retry > NUM_DRAIN_RETRY) throw new IOException("Unable to drain remaining = " + remaining + " bytes")
+          if (retry > NUM_DRAIN_RETRY) {
+            throw new IOException(s"Unable to drain remaining = $remaining bytes")
+          }
           retry += 1
         }
         else retry = 0
@@ -87,7 +106,7 @@ object RpcUtil {
       output.write(baos.get, 0, length)
     } catch {
       case ioEx: IOException =>
-        throw new IllegalStateException("Unable to serialize " + obj, ioEx)
+        throw new IllegalStateException(s"Unable to serialize $obj", ioEx)
     }
   }
 
@@ -102,7 +121,7 @@ object RpcUtil {
       retval
     } catch {
       case e@(_: ClassNotFoundException | _: IOException) =>
-        throw new IllegalStateException("Unable to deserialize trowSet from " + length + " bytes", e)
+        throw new IllegalStateException(s"Unable to deserialize trowSet from $length bytes", e)
     }
   }
 
@@ -117,7 +136,7 @@ object RpcUtil {
       baos.toByteArray
     } catch {
       case ioEx: IOException =>
-        throw new IllegalStateException("Unable to serialize " + obj, ioEx)
+        throw new IllegalStateException(s"Unable to serialize $obj", ioEx)
     }
   }
 
@@ -132,7 +151,7 @@ object RpcUtil {
       baos.toByteArray
     } catch {
       case ioEx: IOException =>
-        throw new IllegalStateException("Unable to serialize " + obj, ioEx)
+        throw new IllegalStateException(s"Unable to serialize $obj", ioEx)
     }
   }
 
@@ -151,6 +170,6 @@ object RpcUtil {
     writable.readFields(dis)
   } catch {
     case ex: IOException =>
-      throw new IllegalStateException("Unable to deserialize from input for " + writable, ex)
+      throw new IllegalStateException(s"Unable to deserialize from input for $writable", ex)
   }
 }

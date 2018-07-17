@@ -17,21 +17,22 @@
 
 package org.apache.livy.thriftserver
 
-import java.util.concurrent.ConcurrentHashMap
 import java.util.{Collections => JCollections, Map => JMap}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import org.apache.livy.Logging
+import scala.collection.mutable
+import scala.util.{Failure, Try}
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.rpc.thrift.TProtocolVersion
+
+import org.apache.livy.Logging
 import org.apache.livy.server.interactive.{CreateInteractiveRequest, InteractiveSession}
 import org.apache.livy.sessions.Spark
 import org.apache.livy.thriftserver.rpc.RpcClient
-
-import scala.collection.mutable
-import scala.util.{Try, Failure}
 
 class LivyThriftSessionManager(val server: LivyThriftServer)
   extends SessionManager(server) with Logging {
