@@ -112,32 +112,10 @@ public class CLIService extends CompositeService implements ICLIService {
         }
       }
     }
-    // creates connection to HMS and thus *must* occur after kerberos login above
-    try {
-      applyAuthorizationConfigPolicy(hiveConf);
-    } catch (Exception e) {
-      throw new RuntimeException("Error applying authorization policy on hive configuration: "
-          + e.getMessage(), e);
-    }
-    setupBlockedUdfs();
-    super.init(hiveConf);
-  }
-
-  private void applyAuthorizationConfigPolicy(HiveConf newHiveConf) throws HiveException,
-      MetaException {
-    // authorization setup using SessionState should be revisited eventually, as
-    // authorization and authentication are not session specific settings
-    SessionState ss = new SessionState(newHiveConf);
+    SessionState ss = new SessionState(hiveConf);
     ss.setIsHiveServerQuery(true);
     SessionState.start(ss);
-    ss.applyAuthorizationPolicy();
-  }
-
-  private void setupBlockedUdfs() {
-    HiveConf hiveConf = getHiveConf();
-    FunctionRegistry.setupPermissionsForBuiltinUDFs(
-        hiveConf.getVar(ConfVars.HIVE_SERVER2_BUILTIN_UDF_WHITELIST),
-        hiveConf.getVar(ConfVars.HIVE_SERVER2_BUILTIN_UDF_BLACKLIST));
+    super.init(hiveConf);
   }
 
   public UserGroupInformation getServiceUGI() {

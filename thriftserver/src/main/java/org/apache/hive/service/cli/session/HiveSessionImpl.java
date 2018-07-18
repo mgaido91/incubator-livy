@@ -114,8 +114,6 @@ public class HiveSessionImpl implements HiveSession {
   private final Set<OperationHandle> opHandleSet = new HashSet<OperationHandle>();
   private boolean isOperationLogEnabled;
   private File sessionLogDir;
-  // TODO: the control flow for this needs to be defined. Hive is supposed to be thread-local.
-  private Hive sessionHive;
 
   private volatile long lastAccessTime = System.currentTimeMillis();
   private volatile boolean lockedByUser;
@@ -184,11 +182,6 @@ public class HiveSessionImpl implements HiveSession {
       String msg = "Failed to load reloadable jar file path: " + e;
       LOG.error(msg, e);
       throw new HiveSQLException(msg, e);
-    }
-    try {
-      sessionHive = Hive.get(getHiveConf());
-    } catch (HiveException e) {
-      throw new HiveSQLException("Failed to get metastore connection", e);
     }
     // Process global init file: .hiverc
     processGlobalInitFile();
@@ -288,15 +281,6 @@ public class HiveSessionImpl implements HiveSession {
         } catch (Exception e) {
           throw new HiveSQLException(e);
         }
-      } else if (key.startsWith("use:")) {
-        try {
-          if (sessionHive.getDatabase(entry.getValue()) == null) {
-            throw new HiveSQLException("Database " + entry.getValue() + " does not exist");
-          }
-        } catch (HiveException e) {
-          throw new HiveSQLException(e);
-        }
-        SessionState.get().setCurrentDatabase(entry.getValue());
       } else {
         sessionConf.verifyAndSet(key, entry.getValue());
       }
@@ -402,7 +386,6 @@ public class HiveSessionImpl implements HiveSession {
     }
     // set the thread name with the logging prefix.
     sessionState.updateThreadName();
-    Hive.set(sessionHive);
   }
 
   /**
@@ -459,16 +442,12 @@ public class HiveSessionImpl implements HiveSession {
 
   @Override
   public Hive getSessionHive() {
-    return sessionHive;
+    throw new UnsupportedOperationException("Cannot access Hive session.");
   }
 
   @Override
   public IMetaStoreClient getMetaStoreClient() throws HiveSQLException {
-    try {
-      return getSessionHive().getMSC();
-    } catch (MetaException e) {
-      throw new HiveSQLException("Failed to get metastore connection: " + e, e);
-    }
+    throw new UnsupportedOperationException("Cannot create Metastore client.");
   }
 
   @Override
@@ -773,14 +752,6 @@ public class HiveSessionImpl implements HiveSession {
           LOG.warn("Error closing session", t);
         }
         sessionState = null;
-      }
-      if (sessionHive != null) {
-        try {
-          Hive.closeCurrent();
-        } catch (Throwable t) {
-          LOG.warn("Error closing sessionHive", t);
-        }
-        sessionHive = null;
       }
       release(true, false);
     }
