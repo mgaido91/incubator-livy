@@ -111,7 +111,7 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
   private def initSession(sessionHandle: SessionHandle, initStatements: List[String]): Unit = {
     val livySession = sessionHandleToLivySession.get(sessionHandle)
     val rpcClient = new RpcClient(livySession)
-    rpcClient.executeRegisterSession(sessionHandle)
+    rpcClient.executeRegisterSession(sessionHandle).get()
     val hiveSession = getSession(sessionHandle)
     initStatements.foreach { statement =>
       val operation = operationManager.newExecuteStatementOperation(
