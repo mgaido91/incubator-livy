@@ -31,6 +31,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.livy.Logging
 import org.apache.livy.server.interactive.InteractiveSession
 import org.apache.livy.thriftserver.rpc.RpcClient
+import org.apache.livy.thriftserver.utils.HiveTypes
 
 class LivyExecuteStatementOperation(
     parentSession: HiveSession,
@@ -136,12 +137,12 @@ class LivyExecuteStatementOperation(
   }
 
   def getResultSetSchema: TableSchema = {
-    rpcClient.fetchResultSchema(statementId).get()
+    HiveTypes.tableSchemaFromSparkJson(rpcClient.fetchResultSchema(statementId).get())
   }
 
   private def cleanup(state: OperationState) {
-    if (statementId != null) {
-      rpcClient.cleanupStatement(statementId)
+    if (statementId != null && rpcClient.isValid) {
+      rpcClient.cleanupStatement(statementId).get()
     }
     setState(state)
   }

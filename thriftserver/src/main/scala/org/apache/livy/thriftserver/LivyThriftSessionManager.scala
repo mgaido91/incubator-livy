@@ -70,7 +70,7 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
       // We unregister the session only if we don't close it, as it is unnecessary in that case
       val rpcClient = new RpcClient(livySession)
       try {
-        rpcClient.executeUnregisterSession(sessionHandle)
+        rpcClient.executeUnregisterSession(sessionHandle).get()
       } catch {
         case e: Exception => warn(s"Unable to unregister session $sessionHandle", e)
       }
@@ -125,7 +125,9 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
       } catch {
         case e: Exception => warn(s"Unable to run: $statement", e)
       } finally {
-        operationManager.closeOperation(operation.getHandle)
+        Try(operationManager.closeOperation(operation.getHandle)).failed.foreach { e =>
+          error(s"Failed to close init operation ${operation.getHandle}", e)
+        }
       }
     }
   }
@@ -179,8 +181,9 @@ object LivyThriftSessionManager extends Logging {
   // variable
   private val livySessionIdConfigKey = "set:hiveconf:livy.server.sessionId"
   private val livySessionConfRegexp = "set:hiveconf:livy.session.conf.(.*)".r
+  private val JAR_LOCATION = getClass.getProtectionDomain.getCodeSource.getLocation.getFile
 
-  private def convertConfValueToInt(key: String, value: String): Option[Int] = {
+  private def convertConfValueToInt(key: String, value: String) = {
     val res = Try(value.toInt)
     if (res.isFailure) {
       warn(s"Ignoring $key = $value as it is not a valid integer")
@@ -222,6 +225,10 @@ object LivyThriftSessionManager extends Logging {
               info(s"Ignoring key: $key = '$value'")
           }
       }
+      // Add the thriftserver jar to Spark application as we need to deserialize there the classes
+      // which handle the job submission
+      // TODO: add to already created session (ie. when the connectionId is specified)
+      extraLivyConf += "spark.jars" -> JAR_LOCATION
       createInteractiveRequest.conf = extraLivyConf.toMap
       val sessionId = Option(sessionConf.get(livySessionIdConfigKey)).flatMap { id =>
         val res = Try(id.toInt)

@@ -30,7 +30,6 @@ import org.apache.livy.sessions.InteractiveSessionManager
  */
 object LivyThriftServer extends Logging {
 
-  val INCR_COLLECT_ENABLED_WITHPREFIX = s"spark.${LivyConf.THRIFT_INCR_COLLECT_ENABLED}"
   private var thriftServerThread: Thread = _
   private val thriftserverThreadGroup = new ThreadGroup("thriftserver")
   /*
