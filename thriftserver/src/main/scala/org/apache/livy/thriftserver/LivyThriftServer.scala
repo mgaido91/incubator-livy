@@ -32,26 +32,6 @@ object LivyThriftServer extends Logging {
 
   private var thriftServerThread: Thread = _
   private val thriftserverThreadGroup = new ThreadGroup("thriftserver")
-  /*
-  def main(args: Array[String]) {
-
-    val optionsProcessor = new HiveServer2.ServerOptionsProcessor("LivyThriftServer")
-    optionsProcessor.parse(args)
-    info("Starting LivyThriftServer")
-
-    try {
-      val sessionManager =
-      val server = new LivyThriftServer()
-      server.init(new HiveConf())
-      server.start()
-      info("LivyThriftServer started")
-    } catch {
-      case e: Exception =>
-        error("Error starting LivyThriftServer", e)
-        System.exit(-1)
-    }
-  }
-  */
 
   def start(
       livyConf: LivyConf,

@@ -45,15 +45,21 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
     Option(sessionHandleToLivySession.get(sessionHandle))
   }
 
-  def onLivySessionCreated(livySession: InteractiveSession): Unit = {
-    managedLivySessionActiveUsers.synchronized {
-      val activeUsers = managedLivySessionActiveUsers.getOrElse(livySession.id, 0)
-      managedLivySessionActiveUsers(livySession.id) = activeUsers + 1
-    }
+  def onLivySessionOpened(livySession: InteractiveSession): Unit = {
+    server.livySessionManager.register(livySession)
+  }
+
+  def onUserSessionOpened(sessionHandle: SessionHandle): Unit = {
+    incrementManagedSessionActiveUsers(getLivySession(sessionHandle).get.id)
+  }
+
+  private def incrementManagedSessionActiveUsers(livySessionId: Int) = synchronized {
+    val activeUsers = managedLivySessionActiveUsers.getOrElse(livySessionId, 0)
+    managedLivySessionActiveUsers(livySessionId) = activeUsers + 1
   }
 
   def onUserSessionClosed(sessionHandle: SessionHandle, livySession: InteractiveSession): Unit = {
-    val closeSession = managedLivySessionActiveUsers.synchronized[Boolean] {
+    val closeSession = synchronized[Boolean] {
       val activeUsers = managedLivySessionActiveUsers(livySession.id)
       if (activeUsers == 1) {
         // it was the last user, so we can close the LivySession
@@ -65,7 +71,7 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
       }
     }
     if (closeSession) {
-      livySession.stopSession()
+      server.livySessionManager.delete(livySession)
     } else {
       // We unregister the session only if we don't close it, as it is unnecessary in that case
       val rpcClient = new RpcClient(livySession)
@@ -153,11 +159,12 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
         server.livyConf,
         createInteractiveRequest,
         server.sessionStore)
-      onLivySessionCreated(newSession)
+      onLivySessionOpened(newSession)
       newSession
     }
     val livySession = getOrCreateLivySession(sessionHandle, sessionId, username, createLivySession)
     sessionHandleToLivySession.put(sessionHandle, livySession)
+    onUserSessionOpened(sessionHandle)
     Try(initSession(sessionHandle, initStatements)) match {
       case Failure(e) =>
         warn(s"Init session $sessionHandle failed.", e)
@@ -221,6 +228,7 @@ object LivyThriftSessionManager extends Logging {
                 createInteractiveRequest.heartbeatTimeoutInSecond = heartbeatTimeoutInSecond
               }
             case livySessionConfRegexp(livyConfKey) => extraLivyConf += (livyConfKey -> value)
+            case _ if key == livySessionIdConfigKey => // Ignore it, we handle it later
             case _ =>
               info(s"Ignoring key: $key = '$value'")
           }
