@@ -103,6 +103,7 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
             warn(s"Session id $id doesn't belong to $username, so we will ignore it.")
             createLivySession()
           case Some(session) => if (session.state.isActive) {
+            info(s"Reusing Session $id for $sessionHandle.")
             session
           } else {
             warn(s"Session id $id is not active anymore, so we will ignore it.")
@@ -114,8 +115,20 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
     }
   }
 
+  /**
+   * Performs the initialization of the new Thriftserver session:
+   *  - adds the Livy thrifserver JAR to the Spark application;
+   *  - register the new Thriftserver session in the Spark application;
+   *  - runs the initialization statements;
+   */
   private def initSession(sessionHandle: SessionHandle, initStatements: List[String]): Unit = {
     val livySession = sessionHandleToLivySession.get(sessionHandle)
+    // Add the thriftserver jar to Spark application as we need to deserialize there the classes
+    // which handle the job submission.
+    // Note: if this is an already existing session, adding the JARs multiple times is not a
+    // problem as Spark ignores JARs which have already been added.
+    livySession.addJar(LivyThriftSessionManager.JAR_LOCATION.toURI)
+
     val rpcClient = new RpcClient(livySession)
     rpcClient.executeRegisterSession(sessionHandle).get()
     val hiveSession = getSession(sessionHandle)
@@ -188,7 +201,7 @@ object LivyThriftSessionManager extends Logging {
   // variable
   private val livySessionIdConfigKey = "set:hiveconf:livy.server.sessionId"
   private val livySessionConfRegexp = "set:hiveconf:livy.session.conf.(.*)".r
-  private val JAR_LOCATION = getClass.getProtectionDomain.getCodeSource.getLocation.getFile
+  private val JAR_LOCATION = getClass.getProtectionDomain.getCodeSource.getLocation
 
   private def convertConfValueToInt(key: String, value: String) = {
     val res = Try(value.toInt)
@@ -233,10 +246,6 @@ object LivyThriftSessionManager extends Logging {
               info(s"Ignoring key: $key = '$value'")
           }
       }
-      // Add the thriftserver jar to Spark application as we need to deserialize there the classes
-      // which handle the job submission
-      // TODO: add to already created session (ie. when the connectionId is specified)
-      extraLivyConf += "spark.jars" -> JAR_LOCATION
       createInteractiveRequest.conf = extraLivyConf.toMap
       val sessionId = Option(sessionConf.get(livySessionIdConfigKey)).flatMap { id =>
         val res = Try(id.toInt)
