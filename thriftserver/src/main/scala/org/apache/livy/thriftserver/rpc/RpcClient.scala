@@ -17,15 +17,15 @@
 
 package org.apache.livy.thriftserver.rpc
 
+import java.lang.reflect.InvocationTargetException
+
 import scala.collection.immutable.HashMap
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
-
-import org.apache.hive.service.cli.{SessionHandle, TableSchema}
-
+import org.apache.hive.service.cli.SessionHandle
 import org.apache.livy._
 import org.apache.livy.server.interactive.InteractiveSession
-import org.apache.livy.thriftserver.utils.HiveTypes
+import org.apache.livy.thriftserver.serde.ColumnOrientedResultSet
 import org.apache.livy.utils.LivySparkUtils
 
 class RpcClient(livySession: InteractiveSession) extends Logging {
@@ -47,10 +47,6 @@ class RpcClient(livySession: InteractiveSession) extends Logging {
     sessionHandle.getSessionId.toString
   }
 
-  private def getSessionSparkEntry(jobContext: JobContext, sessionId: String): AnyRef = {
-    jobContext.getSharedObject[HashMap[String, AnyRef]](SPARK_CONTEXT_MAP)(sessionId)
-  }
-
   @throws[Exception]
   def executeSql(
       sessionHandle: SessionHandle,
@@ -69,12 +65,12 @@ class RpcClient(livySession: InteractiveSession) extends Logging {
   }
 
   @throws[Exception]
-  def fetchResult(statementId: String, maxRows: Int): JobHandle[ResultSetWrapper] = {
+  def fetchResult(statementId: String,
+      types: Array[String],
+      maxRows: Int): JobHandle[ColumnOrientedResultSet] = {
     info(s"RSC client is fetching result for statementId $statementId with $maxRows maxRows.")
     require(null != statementId, s"Invalid statementId specified. StatementId = $statementId")
-    val jsonSchema = fetchResultSchema(statementId).get()
-    val tableSchema = HiveTypes.tableSchemaFromSparkJson(jsonSchema)
-    rscClient.submit(fetchResultJob(statementId, tableSchema, maxRows))
+    rscClient.submit(fetchResultJob(statementId, types, maxRows))
   }
 
   @throws[Exception]
@@ -95,7 +91,7 @@ class RpcClient(livySession: InteractiveSession) extends Logging {
    * Creates a new Spark context for the specified session and stores it in a shared variable so
    * that any incoming session uses a different one: it is needed in order to avoid interactions
    * between different users working on the same remote Livy session (eg. setting a property,
-   * changing databsae, etc.).
+   * changing database, etc.).
    */
   @throws[Exception]
   def executeRegisterSession(sessionHandle: SessionHandle): JobHandle[_] = {
@@ -183,9 +179,9 @@ object RpcClient {
   }
 
   private def fetchResultJob(statementId: String,
-      tableSchema: TableSchema,
-      maxRows: Int): Job[ResultSetWrapper] = new Job[ResultSetWrapper] {
-    override def call(jobContext: JobContext): ResultSetWrapper = {
+      types: Array[String],
+      maxRows: Int): Job[ColumnOrientedResultSet] = new Job[ColumnOrientedResultSet] {
+    override def call(jobContext: JobContext): ColumnOrientedResultSet = {
       val statementIterMap =
         jobContext.getSharedObject[HashMap[String, Iterator[_]]](STATEMENT_RESULT_ITER_MAP)
       val iter = statementIterMap(statementId)
@@ -195,10 +191,10 @@ object RpcClient {
         throw new NoSuchElementException("No successful query executed for output")
       }
 
-      val resultRowSet = ResultSetWrapper.create(tableSchema)
-      val numOfColumns = tableSchema.getSize
+      val resultSet = new ColumnOrientedResultSet(types)
+      val numOfColumns = types.length
       if (!iter.hasNext) {
-        resultRowSet
+        resultSet
       } else {
         var curRow = 0
         while (curRow < maxRows && iter.hasNext) {
@@ -209,10 +205,10 @@ object RpcClient {
             row += sparkRow.getClass.getMethod("get", classOf[Int]).invoke(sparkRow, curCol)
             curCol += 1
           }
-          resultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
+          resultSet.addRow(row.toArray.asInstanceOf[Array[Object]])
           curRow += 1
         }
-        resultRowSet
+        resultSet
       }
     }
   }
@@ -229,45 +225,49 @@ object RpcClient {
         sparkContext.setJobGroup(statementId, statement)
       }
       val spark = jc.getSharedObject[HashMap[String, AnyRef]](SPARK_CONTEXT_MAP)(sessionId)
-      val result = spark.getClass.getMethod("sql", classOf[String]).invoke(spark, statement)
-      val schema = result.getClass.getMethod("schema").invoke(result)
-      val jsonString = schema.getClass.getMethod("json").invoke(schema).asInstanceOf[String]
+      try {
+        val result = spark.getClass.getMethod("sql", classOf[String]).invoke(spark, statement)
+        val schema = result.getClass.getMethod("schema").invoke(result)
+        val jsonString = schema.getClass.getMethod("json").invoke(schema).asInstanceOf[String]
 
-      // Set the schema in the shared map
-      sparkContext.synchronized {
-        val existingMap = jc.getSharedObject[HashMap[String, String]](STATEMENT_SCHEMA_MAP)
-        jc.setSharedObject(STATEMENT_SCHEMA_MAP, existingMap + (statementId -> jsonString))
-      }
-
-      val incrementalCollect = {
-        if (isSpark1) {
-          spark.getClass.getMethod("getConf", classOf[String], classOf[String])
-            .invoke(spark,
-              incrementalCollectEnabledProp,
-              defaultIncrementalCollect)
-            .asInstanceOf[String].toBoolean
-        } else {
-          val conf = spark.getClass.getMethod("conf").invoke(spark)
-          conf.getClass.getMethod("get", classOf[String], classOf[String])
-            .invoke(conf,
-              incrementalCollectEnabledProp,
-              defaultIncrementalCollect)
-            .asInstanceOf[String].toBoolean
+        // Set the schema in the shared map
+        sparkContext.synchronized {
+          val existingMap = jc.getSharedObject[HashMap[String, String]](STATEMENT_SCHEMA_MAP)
+          jc.setSharedObject(STATEMENT_SCHEMA_MAP, existingMap + (statementId -> jsonString))
         }
-      }
 
-      val iter = if (incrementalCollect) {
-        val rdd = result.getClass.getMethod("rdd").invoke(result)
-        rdd.getClass.getMethod("toLocalIterator").invoke(rdd).asInstanceOf[Iterator[_]]
-      } else {
-        result.getClass.getMethod("collect").invoke(result).asInstanceOf[Array[_]].iterator
-      }
+        val incrementalCollect = {
+          if (isSpark1) {
+            spark.getClass.getMethod("getConf", classOf[String], classOf[String])
+              .invoke(spark,
+                incrementalCollectEnabledProp,
+                defaultIncrementalCollect)
+              .asInstanceOf[String].toBoolean
+          } else {
+            val conf = spark.getClass.getMethod("conf").invoke(spark)
+            conf.getClass.getMethod("get", classOf[String], classOf[String])
+              .invoke(conf,
+                incrementalCollectEnabledProp,
+                defaultIncrementalCollect)
+              .asInstanceOf[String].toBoolean
+          }
+        }
 
-      // Set the iterator in the shared map
-      sparkContext.synchronized {
-        val existingMap =
-          jc.getSharedObject[HashMap[String, Iterator[_]]](STATEMENT_RESULT_ITER_MAP)
-        jc.setSharedObject(STATEMENT_RESULT_ITER_MAP, existingMap + (statementId -> iter))
+        val iter = if (incrementalCollect) {
+          val rdd = result.getClass.getMethod("rdd").invoke(result)
+          rdd.getClass.getMethod("toLocalIterator").invoke(rdd).asInstanceOf[Iterator[_]]
+        } else {
+          result.getClass.getMethod("collect").invoke(result).asInstanceOf[Array[_]].iterator
+        }
+
+        // Set the iterator in the shared map
+        sparkContext.synchronized {
+          val existingMap =
+            jc.getSharedObject[HashMap[String, Iterator[_]]](STATEMENT_RESULT_ITER_MAP)
+          jc.setSharedObject(STATEMENT_RESULT_ITER_MAP, existingMap + (statementId -> iter))
+        }
+      } catch {
+        case e: InvocationTargetException => throw e.getCause
       }
 
       true

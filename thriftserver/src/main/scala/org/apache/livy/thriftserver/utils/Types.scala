@@ -20,12 +20,15 @@ package org.apache.livy.thriftserver.utils
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hadoop.hive.serde2.thrift.Type
 import org.apache.hive.service.cli.TableSchema
 import org.json4s.{DefaultFormats, JValue}
 import org.json4s.JsonAST.{JObject, JString}
 import org.json4s.jackson.JsonMethods.parse
 
-object HiveTypes {
+import org.apache.livy.Logging
+
+object Types extends Logging {
   // Used for JSON conversion
   private implicit val formats = DefaultFormats
 
@@ -33,6 +36,15 @@ object HiveTypes {
     jValue match {
       case JString(t) => primitiveToHive(t)
       case o: JObject => complexToHive(o)
+      case _ => throw new IllegalArgumentException(
+        s"Spark type was neither a string nor a object. It was: $jValue.")
+    }
+  }
+
+  private def getMainType(jValue: JValue): String = {
+    jValue match {
+      case JString(t) => t
+      case o: JObject => (o \ "type").extract[String]
       case _ => throw new IllegalArgumentException(
         s"Spark type was neither a string nor a object. It was: $jValue.")
     }
@@ -64,6 +76,7 @@ object HiveTypes {
   }
 
   def tableSchemaFromSparkJson(sparkJson: String): TableSchema = {
+    debug(s"Parsing Spark schema into Hive's one: $sparkJson.")
     val schema = parse(sparkJson) \ "fields"
     val fields = schema.children.map { field =>
       val name = (field \ "name").extract[String]
@@ -71,5 +84,28 @@ object HiveTypes {
       new FieldSchema(name, hiveType, "")
     }
     new TableSchema(fields.asJava)
+  }
+
+  def getMainTypes(sparkJson: String): Array[String] = {
+    debug(s"Get main types for: $sparkJson.")
+    val schema = parse(sparkJson) \ "fields"
+    schema.children.map { field =>
+      getMainType(field \ "type")
+    }.toArray
+  }
+
+  def toThriftType(sparkDataType: String): Type = {
+    sparkDataType match {
+      case "boolean" => Type.BOOLEAN_TYPE
+      case "byte" => Type.TINYINT_TYPE
+      case "short" => Type.SMALLINT_TYPE
+      case "integer" => Type.INT_TYPE
+      case "long" => Type.BIGINT_TYPE
+      case "float" => Type.FLOAT_TYPE
+      case "double" => Type.DOUBLE_TYPE
+      case "binary" => Type.BINARY_TYPE
+      case "null" => Type.NULL_TYPE
+      case _ => Type.STRING_TYPE
+    }
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.livy.thriftserver
 
+import java.io.IOException
 import java.util.{Collections => JCollections, Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
@@ -45,6 +46,10 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
     Option(sessionHandleToLivySession.get(sessionHandle))
   }
 
+  def numberOfActiveUsers(livySessionId: Int): Int = synchronized[Int] {
+    managedLivySessionActiveUsers.getOrElse(livySessionId, 0)
+  }
+
   def onLivySessionOpened(livySession: InteractiveSession): Unit = {
     server.livySessionManager.register(livySession)
   }
@@ -53,9 +58,8 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
     incrementManagedSessionActiveUsers(getLivySession(sessionHandle).get.id)
   }
 
-  private def incrementManagedSessionActiveUsers(livySessionId: Int) = synchronized {
-    val activeUsers = managedLivySessionActiveUsers.getOrElse(livySessionId, 0)
-    managedLivySessionActiveUsers(livySessionId) = activeUsers + 1
+  private def incrementManagedSessionActiveUsers(livySessionId: Int): Unit = synchronized {
+    managedLivySessionActiveUsers(livySessionId) = numberOfActiveUsers(livySessionId) + 1
   }
 
   def onUserSessionClosed(sessionHandle: SessionHandle, livySession: InteractiveSession): Unit = {
@@ -123,11 +127,20 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
    */
   private def initSession(sessionHandle: SessionHandle, initStatements: List[String]): Unit = {
     val livySession = sessionHandleToLivySession.get(sessionHandle)
-    // Add the thriftserver jar to Spark application as we need to deserialize there the classes
-    // which handle the job submission.
-    // Note: if this is an already existing session, adding the JARs multiple times is not a
-    // problem as Spark ignores JARs which have already been added.
-    livySession.addJar(LivyThriftSessionManager.JAR_LOCATION.toURI)
+
+    if (numberOfActiveUsers(livySession.id) <= 1) {
+      // Add the thriftserver jar to Spark application as we need to deserialize there the classes
+      // which handle the job submission.
+      // Note: if this is an already existing session, adding the JARs multiple times is not a
+      // problem as Spark ignores JARs which have already been added.
+      try {
+        livySession.addJar(LivyThriftSessionManager.JAR_LOCATION.toURI)
+      } catch {
+        case ioe: IOException if ioe.getMessage.contains("has already been uploaded") =>
+          // We have already uploaded the jar to this session, we can ignore this error
+          debug(ioe.getMessage, ioe)
+      }
+    }
 
     val rpcClient = new RpcClient(livySession)
     rpcClient.executeRegisterSession(sessionHandle).get()
