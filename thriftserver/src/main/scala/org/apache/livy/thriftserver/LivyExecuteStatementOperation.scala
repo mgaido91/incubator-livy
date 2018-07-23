@@ -61,7 +61,7 @@ class LivyExecuteStatementOperation(
     val livyColumnResultSet = rpcClient.fetchResult(statementId, types, maxRows).get()
 
     val thriftColumns = livyColumnResultSet.columns.map { col =>
-      new ColumnBuffer(toHiveThriftType(col.dataType), col.nulls, col.getColumnValues)
+      new ColumnBuffer(toHiveThriftType(col.dataType), col.getNulls, col.getColumnValues)
     }
     val result = new ColumnBasedSet(tableSchemaFromSparkJson(jsonSchema).toTypeDescriptors,
       thriftColumns.toList.asJava,

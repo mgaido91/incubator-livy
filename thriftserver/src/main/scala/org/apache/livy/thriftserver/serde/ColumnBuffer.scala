@@ -20,6 +20,8 @@ package org.apache.livy.thriftserver.serde
 import java.nio.ByteBuffer
 import java.util
 
+import scala.collection.mutable
+
 import org.apache.livy.thriftserver.types.{DataType, DataTypeUtils}
 
 object ColumnBuffer {
@@ -27,7 +29,7 @@ object ColumnBuffer {
 }
 
 class ColumnBuffer(val dataType: DataType) {
-  private[thriftserver] val nulls = new util.BitSet
+  private val nulls = new mutable.BitSet()
   private var currentSize = 0
   private var boolVars: Array[Boolean] = _
   private var byteVars: Array[Byte] = _
@@ -59,7 +61,7 @@ class ColumnBuffer(val dataType: DataType) {
   }
 
   def get(index: Int): Any = {
-    if (this.nulls.get(index)) {
+    if (this.nulls(index)) {
       null
     } else {
       dataType.name match {
@@ -87,7 +89,7 @@ class ColumnBuffer(val dataType: DataType) {
 
   def addValue(field: Any): Unit = {
     if (field == null) {
-      nulls.set(currentSize)
+      nulls += currentSize
     } else {
       dataType.name match {
         case "boolean" =>
@@ -170,4 +172,6 @@ class ColumnBuffer(val dataType: DataType) {
     case "binary" => binaryVars
     case _ => stringVars
   }
+
+  private[thriftserver] def getNulls: util.BitSet = util.BitSet.valueOf(nulls.toBitMask)
 }
