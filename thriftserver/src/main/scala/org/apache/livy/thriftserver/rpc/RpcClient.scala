@@ -22,10 +22,13 @@ import java.lang.reflect.InvocationTargetException
 import scala.collection.immutable.HashMap
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
+
 import org.apache.hive.service.cli.SessionHandle
+
 import org.apache.livy._
 import org.apache.livy.server.interactive.InteractiveSession
 import org.apache.livy.thriftserver.serde.ColumnOrientedResultSet
+import org.apache.livy.thriftserver.types.DataType
 import org.apache.livy.utils.LivySparkUtils
 
 class RpcClient(livySession: InteractiveSession) extends Logging {
@@ -66,7 +69,7 @@ class RpcClient(livySession: InteractiveSession) extends Logging {
 
   @throws[Exception]
   def fetchResult(statementId: String,
-      types: Array[String],
+      types: Array[DataType],
       maxRows: Int): JobHandle[ColumnOrientedResultSet] = {
     info(s"RSC client is fetching result for statementId $statementId with $maxRows maxRows.")
     require(null != statementId, s"Invalid statementId specified. StatementId = $statementId")
@@ -179,7 +182,7 @@ object RpcClient {
   }
 
   private def fetchResultJob(statementId: String,
-      types: Array[String],
+      types: Array[DataType],
       maxRows: Int): Job[ColumnOrientedResultSet] = new Job[ColumnOrientedResultSet] {
     override def call(jobContext: JobContext): ColumnOrientedResultSet = {
       val statementIterMap =

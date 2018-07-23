@@ -15,21 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.livy.thriftserver.serde
+package org.apache.livy.thriftserver.types
 
-import org.apache.livy.thriftserver.types.DataType
+private[thriftserver] trait DataType {
+  def name: String
+}
 
-/**
- * Utility class for (de-)serialize the results from the Spark application and Livy thriftserver.
- */
-class ColumnOrientedResultSet(val types: Array[DataType]) {
-  val columns: Array[ColumnBuffer] = types.map(new ColumnBuffer(_))
-  def addRow(fields: Array[AnyRef]): Unit = {
-    var i = 0
-    while (i < fields.length) {
-      val field = fields(i)
-      columns(i).addValue(field)
-      i += 1
-    }
-  }
+private[thriftserver] case class BasicDataType(name: String) extends DataType
+
+private[thriftserver] case class StructField(name: String, dataType: DataType)
+
+private[thriftserver]case class StructType(fields: Array[StructField]) extends DataType {
+  val name = "struct"
+}
+
+private[thriftserver] case class ArrayType(elementsType: DataType) extends DataType {
+  val name = "array"
+}
+
+private[thriftserver] case class MapType(keyType: DataType, valueType: DataType) extends DataType {
+  val name = "map"
 }

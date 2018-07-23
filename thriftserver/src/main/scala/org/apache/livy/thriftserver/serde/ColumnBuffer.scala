@@ -20,11 +20,13 @@ package org.apache.livy.thriftserver.serde
 import java.nio.ByteBuffer
 import java.util
 
+import org.apache.livy.thriftserver.types.{DataType, DataTypeUtils}
+
 object ColumnBuffer {
   private val DEFAULT_SIZE = 100
 }
 
-class ColumnBuffer(val dataType: String) {
+class ColumnBuffer(val dataType: DataType) {
   private[thriftserver] val nulls = new util.BitSet
   private var currentSize = 0
   private var boolVars: Array[Boolean] = _
@@ -36,7 +38,7 @@ class ColumnBuffer(val dataType: String) {
   private var stringVars: util.List[String] = _
   private var binaryVars: util.List[ByteBuffer] = _
 
-  dataType match {
+  dataType.name match {
     case "boolean" =>
       boolVars = new Array[Boolean](ColumnBuffer.DEFAULT_SIZE)
     case "byte" =>
@@ -60,7 +62,7 @@ class ColumnBuffer(val dataType: String) {
     if (this.nulls.get(index)) {
       null
     } else {
-      dataType match {
+      dataType.name match {
         case "boolean" =>
           boolVars(index)
         case "byte" =>
@@ -87,7 +89,7 @@ class ColumnBuffer(val dataType: String) {
     if (field == null) {
       nulls.set(currentSize)
     } else {
-      dataType match {
+      dataType.name match {
         case "boolean" =>
           checkBoolVarsSize()
           boolVars(currentSize) = field.asInstanceOf[Boolean]
@@ -114,8 +116,7 @@ class ColumnBuffer(val dataType: String) {
         case "binary" =>
           binaryVars.add(ByteBuffer.wrap(field.asInstanceOf[Array[Byte]]))
         case _ =>
-          // TODO: improve serialization for complex types
-          stringVars.add(String.valueOf(field))
+          stringVars.add(DataTypeUtils.toHiveString(field, dataType))
       }
     }
 
@@ -158,7 +159,7 @@ class ColumnBuffer(val dataType: String) {
     doubleVars = newVars
   }
 
-  private[thriftserver] def getColumnValues: Any = dataType match {
+  private[thriftserver] def getColumnValues: Any = dataType.name match {
     case "boolean" => boolVars.take(size)
     case "byte" => byteVars.take(size)
     case "short" => shortVars.take(size)

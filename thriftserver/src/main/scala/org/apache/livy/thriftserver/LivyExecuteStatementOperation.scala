@@ -34,7 +34,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.livy.Logging
 import org.apache.livy.server.interactive.InteractiveSession
 import org.apache.livy.thriftserver.rpc.RpcClient
-import org.apache.livy.thriftserver.utils.Types
+import org.apache.livy.thriftserver.types.DataTypeUtils._
 
 class LivyExecuteStatementOperation(
     parentSession: HiveSession,
@@ -57,13 +57,13 @@ class LivyExecuteStatementOperation(
     // maxRowsL here typically maps to java.sql.Statement.getFetchSize, which is an int
     val maxRows = maxRowsL.toInt
     val jsonSchema = rpcClient.fetchResultSchema(statementId).get()
-    val types = Types.getMainTypes(jsonSchema)
+    val types = getInternalTypes(jsonSchema)
     val livyColumnResultSet = rpcClient.fetchResult(statementId, types, maxRows).get()
 
     val thriftColumns = livyColumnResultSet.columns.map { col =>
-      new ColumnBuffer(Types.toThriftType(col.dataType), col.nulls, col.getColumnValues)
+      new ColumnBuffer(toHiveThriftType(col.dataType), col.nulls, col.getColumnValues)
     }
-    val result = new ColumnBasedSet(Types.tableSchemaFromSparkJson(jsonSchema).toTypeDescriptors,
+    val result = new ColumnBasedSet(tableSchemaFromSparkJson(jsonSchema).toTypeDescriptors,
       thriftColumns.toList.asJava,
       rowOffset)
     livyColumnResultSet.columns.headOption.foreach { c =>
@@ -154,8 +154,7 @@ class LivyExecuteStatementOperation(
   }
 
   def getResultSetSchema: TableSchema = {
-    val tableSchema =
-      Types.tableSchemaFromSparkJson(rpcClient.fetchResultSchema(statementId).get())
+    val tableSchema = tableSchemaFromSparkJson(rpcClient.fetchResultSchema(statementId).get())
     // Workaround for operations returning an empty schema (eg. CREATE, INSERT, ...)
     if (tableSchema.getSize == 0) {
       tableSchema.addStringColumn("Result", "")
