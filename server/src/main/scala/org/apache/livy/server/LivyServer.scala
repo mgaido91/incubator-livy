@@ -269,9 +269,13 @@ class LivyServer extends Logging {
     if (livyConf.getBoolean(LivyConf.THRIFT_SERVER_ENABLED)) {
       val thriftserverObj = Class.forName("org.apache.livy.thriftserver.LivyThriftServer$")
         .getField("MODULE$").get(null)
-      thriftserverObj.getClass.getMethod(
-          "start", classOf[LivyConf], classOf[InteractiveSessionManager], classOf[SessionStore])
-        .invoke(thriftserverObj, livyConf, interactiveSessionManager, sessionStore)
+      val startMethod = thriftserverObj.getClass.getMethod("start",
+          classOf[LivyConf],
+          classOf[InteractiveSessionManager],
+          classOf[SessionStore],
+          classOf[AccessManager])
+      startMethod.invoke(
+        thriftserverObj, livyConf, interactiveSessionManager, sessionStore, accessManager)
     }
 
     _serverUrl = Some(s"${server.protocol}://${server.host}:${server.port}")

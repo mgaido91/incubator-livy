@@ -103,7 +103,7 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
           case None =>
             warn(s"Session id $id doesn't exist, so we will ignore it.")
             createLivySession()
-          case Some(session) if session.proxyUser.getOrElse(session.owner) != username =>
+          case Some(session) if !server.isAllowedToUse(username, session) =>
             warn(s"Session id $id doesn't belong to $username, so we will ignore it.")
             createLivySession()
           case Some(session) => if (session.state.isActive) {

@@ -21,6 +21,8 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.server.HiveServer2
 
 import org.apache.livy.{LivyConf, Logging}
+import org.apache.livy.server.AccessManager
+import org.apache.livy.server.interactive.InteractiveSession
 import org.apache.livy.server.recovery.SessionStore
 import org.apache.livy.sessions.InteractiveSessionManager
 
@@ -36,13 +38,18 @@ object LivyThriftServer extends Logging {
   def start(
       livyConf: LivyConf,
       livySessionManager: InteractiveSessionManager,
-      sessionStore: SessionStore): Unit = synchronized {
+      sessionStore: SessionStore,
+      accessManager: AccessManager): Unit = synchronized {
     if (thriftServerThread == null) {
       info("Starting LivyThriftServer")
       val runThriftServer = new Runnable {
         override def run(): Unit = {
           try {
-            val server = new LivyThriftServer(livyConf, livySessionManager, sessionStore)
+            val server = new LivyThriftServer(
+              livyConf,
+              livySessionManager,
+              sessionStore,
+              accessManager)
             server.init(new HiveConf())
             server.start()
             info("LivyThriftServer started")
@@ -65,9 +72,14 @@ object LivyThriftServer extends Logging {
 class LivyThriftServer(
       private[thriftserver] val livyConf: LivyConf,
       private[thriftserver] val livySessionManager: InteractiveSessionManager,
-      private[thriftserver] val sessionStore: SessionStore) extends HiveServer2 {
+      private[thriftserver] val sessionStore: SessionStore,
+      private val accessManager: AccessManager) extends HiveServer2 {
   override def init(hiveConf: HiveConf): Unit = {
     this.cliService = new LivyCLIService(this)
     super.init(hiveConf)
+  }
+
+  def isAllowedToUse(user: String, session: InteractiveSession): Boolean = {
+    session.owner == user || accessManager.checkModifyPermissions(user)
   }
 }
