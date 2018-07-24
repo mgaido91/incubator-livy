@@ -136,9 +136,10 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
       try {
         livySession.addJar(LivyThriftSessionManager.JAR_LOCATION.toURI)
       } catch {
-        case ioe: IOException if ioe.getMessage.contains("has already been uploaded") =>
+        case e: java.util.concurrent.ExecutionException
+            if Option(e.getCause).forall(_.getMessage.contains("has already been uploaded")) =>
           // We have already uploaded the jar to this session, we can ignore this error
-          debug(ioe.getMessage, ioe)
+          debug(e.getMessage, e)
       }
     }
 
