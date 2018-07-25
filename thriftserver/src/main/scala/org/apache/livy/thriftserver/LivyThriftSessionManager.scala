@@ -17,19 +17,22 @@
 
 package org.apache.livy.thriftserver
 
-import java.io.IOException
-import java.util.{Collections => JCollections, Map => JMap}
+import java.util.{Map => JMap, UUID}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.util.{Failure, Try}
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration.Duration
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.rpc.thrift.TProtocolVersion
 
+import org.apache.livy.LivyConf
 import org.apache.livy.Logging
 import org.apache.livy.server.interactive.{CreateInteractiveRequest, InteractiveSession}
 import org.apache.livy.sessions.Spark
@@ -38,12 +41,29 @@ import org.apache.livy.thriftserver.rpc.RpcClient
 class LivyThriftSessionManager(val server: LivyThriftServer)
   extends SessionManager(server) with Logging {
   private val sessionHandleToLivySession =
-    new ConcurrentHashMap[SessionHandle, InteractiveSession]()
+    new ConcurrentHashMap[SessionHandle, Future[InteractiveSession]]()
   private val managedLivySessionActiveUsers =
     new mutable.HashMap[Int, Int]()
+  private val maxSessionWait = Duration(
+    server.livyConf.getTimeAsMs(LivyConf.THRIFT_SESSION_CREATION_TIMEOUT),
+    scala.concurrent.duration.MILLISECONDS)
 
-  def getLivySession(sessionHandle: SessionHandle): Option[InteractiveSession] = {
-    Option(sessionHandleToLivySession.get(sessionHandle))
+  def getLivySession(sessionHandle: SessionHandle): InteractiveSession = {
+    val future = sessionHandleToLivySession.get(sessionHandle)
+    assert(future != null, s"Looking for not existing session: $sessionHandle.")
+
+    if (!future.isCompleted) {
+      Try(Await.result(future, maxSessionWait)) match {
+        case Success(session) => session
+        case Failure(e) => throw e
+      }
+    } else {
+      future.value match {
+        case Some(Success(session)) => session
+        case Some(Failure(e)) => throw e
+        case None => throw new RuntimeException("Future cannot be None when it is completed")
+      }
+    }
   }
 
   def numberOfActiveUsers(livySessionId: Int): Int = synchronized[Int] {
@@ -52,10 +72,6 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
 
   def onLivySessionOpened(livySession: InteractiveSession): Unit = {
     server.livySessionManager.register(livySession)
-  }
-
-  def onUserSessionOpened(sessionHandle: SessionHandle): Unit = {
-    incrementManagedSessionActiveUsers(getLivySession(sessionHandle).get.id)
   }
 
   private def incrementManagedSessionActiveUsers(livySessionId: Int): Unit = synchronized {
@@ -125,41 +141,34 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
    *  - register the new Thriftserver session in the Spark application;
    *  - runs the initialization statements;
    */
-  private def initSession(sessionHandle: SessionHandle, initStatements: List[String]): Unit = {
-    val livySession = sessionHandleToLivySession.get(sessionHandle)
-
-    if (numberOfActiveUsers(livySession.id) <= 1) {
-      // Add the thriftserver jar to Spark application as we need to deserialize there the classes
-      // which handle the job submission.
-      // Note: if this is an already existing session, adding the JARs multiple times is not a
-      // problem as Spark ignores JARs which have already been added.
-      try {
-        livySession.addJar(LivyThriftSessionManager.JAR_LOCATION.toURI)
-      } catch {
-        case e: java.util.concurrent.ExecutionException
-            if Option(e.getCause).forall(_.getMessage.contains("has already been uploaded")) =>
-          // We have already uploaded the jar to this session, we can ignore this error
-          debug(e.getMessage, e)
-      }
+  private def initSession(
+      sessionHandle: SessionHandle,
+      livySession: InteractiveSession,
+      initStatements: List[String]): Unit = {
+    // Add the thriftserver jar to Spark application as we need to deserialize there the classes
+    // which handle the job submission.
+    // Note: if this is an already existing session, adding the JARs multiple times is not a
+    // problem as Spark ignores JARs which have already been added.
+    try {
+      livySession.addJar(LivyThriftSessionManager.JAR_LOCATION.toURI)
+    } catch {
+      case e: java.util.concurrent.ExecutionException
+          if Option(e.getCause).forall(_.getMessage.contains("has already been uploaded")) =>
+        // We have already uploaded the jar to this session, we can ignore this error
+        debug(e.getMessage, e)
     }
 
     val rpcClient = new RpcClient(livySession)
     rpcClient.executeRegisterSession(sessionHandle).get()
-    val hiveSession = getSession(sessionHandle)
     initStatements.foreach { statement =>
-      val operation = operationManager.newExecuteStatementOperation(
-        hiveSession,
-        statement,
-        JCollections.emptyMap(),
-        false,
-        0)
+      val statementId = UUID.randomUUID().toString
       try {
-        operation.run()
+        rpcClient.executeSql(sessionHandle, statementId, statement).get()
       } catch {
         case e: Exception => warn(s"Unable to run: $statement", e)
       } finally {
-        Try(operationManager.closeOperation(operation.getHandle)).failed.foreach { e =>
-          error(s"Failed to close init operation ${operation.getHandle}", e)
+        Try(rpcClient.cleanupStatement(statementId).get()).failed.foreach { e =>
+          error(s"Failed to close init operation $statementId", e)
         }
       }
     }
@@ -189,24 +198,39 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
       onLivySessionOpened(newSession)
       newSession
     }
-    val livySession = getOrCreateLivySession(sessionHandle, sessionId, username, createLivySession)
-    sessionHandleToLivySession.put(sessionHandle, livySession)
-    onUserSessionOpened(sessionHandle)
-    Try(initSession(sessionHandle, initStatements)) match {
-      case Failure(e) =>
-        warn(s"Init session $sessionHandle failed.", e)
-        Try(closeSession(sessionHandle)).failed.foreach { e =>
-          warn(s"Closing session $sessionHandle failed.", e)
+    val futureLivySession = Future(
+      getOrCreateLivySession(sessionHandle, sessionId, username, createLivySession))
+    val futureInitSession = futureLivySession.andThen {
+      case Success(livySession) =>
+        incrementManagedSessionActiveUsers(livySession.id)
+        Try(initSession(sessionHandle, livySession, initStatements)) match {
+          case Failure(e) =>
+            warn(s"Init session $sessionHandle failed.", e)
+            Try(closeSession(sessionHandle)).failed.foreach { e =>
+              warn(s"Closing session $sessionHandle failed.", e)
+            }
+          case _ => // do nothing
         }
-      case _ => // do nothing
+      case Failure(_) => // do nothing
     }
+    sessionHandleToLivySession.put(sessionHandle, futureInitSession)
     sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle): Unit = {
     super.closeSession(sessionHandle)
     val removedSession = sessionHandleToLivySession.remove(sessionHandle)
-    onUserSessionClosed(sessionHandle, removedSession)
+    removedSession.value match {
+      case Some(Success(interactiveSession)) =>
+        onUserSessionClosed(sessionHandle, interactiveSession)
+      case None =>
+        Try(Await.result(removedSession, maxSessionWait)) match {
+          case Success(interactiveSession) =>
+            onUserSessionClosed(sessionHandle, interactiveSession)
+          case _ => // nothing to do
+        }
+      case _ => // nothing to do
+    }
   }
 }
 

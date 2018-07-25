@@ -35,10 +35,9 @@ class LivyOperationManager(
       runAsync: Boolean,
       queryTimeout: Long): ExecuteStatementOperation = {
     val livySession = livyThriftSessionManager.getLivySession(parentSession.getSessionHandle)
-    assert(livySession.isDefined)
-    assert(livySession.get.state.isActive)
+    assert(livySession.state.isActive)
     val op = new LivyExecuteStatementOperation(
-      parentSession, statement, confOverlay, runAsync, livySession.get)
+      parentSession, statement, confOverlay, runAsync, livySession)
     addOperation(op)
     debug(s"Created Operation for $statement with session=$parentSession, " +
       s"runInBackground=$runAsync")
