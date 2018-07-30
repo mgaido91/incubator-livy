@@ -66,6 +66,10 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
     }
   }
 
+  def livySessionId(sessionHandle: SessionHandle): Option[Int] = {
+    sessionHandleToLivySession.get(sessionHandle).value.filter(_.isSuccess).map(_.get.id)
+  }
+
   def numberOfActiveUsers(livySessionId: Int): Int = synchronized[Int] {
     managedLivySessionActiveUsers.getOrElse(livySessionId, 0)
   }

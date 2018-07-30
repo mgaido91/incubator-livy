@@ -19,12 +19,14 @@ package org.apache.livy.thriftserver
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.server.HiveServer2
+import org.scalatra.ScalatraServlet
 
 import org.apache.livy.{LivyConf, Logging}
 import org.apache.livy.server.AccessManager
 import org.apache.livy.server.interactive.InteractiveSession
 import org.apache.livy.server.recovery.SessionStore
 import org.apache.livy.sessions.InteractiveSessionManager
+import org.apache.livy.thriftserver.ui.ThriftUIServlet
 
 /**
  * The main entry point for the Livy thrift server leveraging HiveServer2. Starts up a
@@ -33,7 +35,7 @@ import org.apache.livy.sessions.InteractiveSessionManager
 object LivyThriftServer extends Logging {
 
   private var thriftServerThread: Thread = _
-  private val thriftserverThreadGroup = new ThreadGroup("thriftserver")
+  private var thriftServer: LivyThriftServer = _
 
   def start(
       livyConf: LivyConf,
@@ -45,13 +47,13 @@ object LivyThriftServer extends Logging {
       val runThriftServer = new Runnable {
         override def run(): Unit = {
           try {
-            val server = new LivyThriftServer(
+            thriftServer = new LivyThriftServer(
               livyConf,
               livySessionManager,
               sessionStore,
               accessManager)
-            server.init(new HiveConf())
-            server.start()
+            thriftServer.init(new HiveConf())
+            thriftServer.start()
             info("LivyThriftServer started")
           } catch {
             case e: Exception =>
@@ -60,12 +62,18 @@ object LivyThriftServer extends Logging {
         }
       }
       thriftServerThread =
-        new Thread(thriftserverThreadGroup, runThriftServer, "Livy-Thriftserver")
+        new Thread(new ThreadGroup("thriftserver"), runThriftServer, "Livy-Thriftserver")
       thriftServerThread.start()
     } else {
       error("Livy Thriftserver is already started")
     }
   }
+
+  private[thriftserver] def getInstance: Option[LivyThriftServer] = {
+    Option(thriftServer)
+  }
+
+  def getUI(basePath: String): ScalatraServlet = new ThriftUIServlet(basePath)
 }
 
 
@@ -77,6 +85,10 @@ class LivyThriftServer(
   override def init(hiveConf: HiveConf): Unit = {
     this.cliService = new LivyCLIService(this)
     super.init(hiveConf)
+  }
+
+  private[thriftserver] def getSessionManager(): LivyThriftSessionManager = {
+    this.cliService.getSessionManager.asInstanceOf[LivyThriftSessionManager]
   }
 
   def isAllowedToUse(user: String, session: InteractiveSession): Boolean = {

@@ -134,6 +134,14 @@ class LivyServer extends Logging {
     server = new WebServer(livyConf, host, port)
     server.context.setResourceBase("src/main/org/apache/livy/server")
 
+    def invokeOnStaticThriftserver(method: String, args: (Class[_], Object)*): Object = {
+      val thriftserverObj = Class.forName("org.apache.livy.thriftserver.LivyThriftServer$")
+        .getField("MODULE$").get(null)
+      val (classes, values) = args.unzip
+      val m = thriftserverObj.getClass.getMethod(method, classes: _*)
+      m.invoke(thriftserverObj, values: _*)
+    }
+
     val livyVersionServlet = new JsonServlet {
       before() { contentType = "application/json" }
 
@@ -199,10 +207,16 @@ class LivyServer extends Logging {
             mount(context, batchServlet, "/batches/*")
 
             if (livyConf.getBoolean(UI_ENABLED)) {
-              val uiServlet = new UIServlet(basePath)
+              val uiServlet = new UIServlet(basePath, livyConf)
               mount(context, uiServlet, "/ui/*")
               mount(context, staticResourceServlet, "/static/*")
               mount(context, uiRedirectServlet(basePath + "/ui/"), "/*")
+              if (livyConf.getBoolean(THRIFT_SERVER_ENABLED)) {
+                val thriftServerSerlvet =
+                  invokeOnStaticThriftserver("getUI", (classOf[String], basePath))
+                    .asInstanceOf[ScalatraServlet]
+                mount(context, thriftServerSerlvet, "/thriftserver/*")
+              }
             } else {
               mount(context, uiRedirectServlet(basePath + "/metrics"), "/*")
             }
