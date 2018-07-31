@@ -17,6 +17,7 @@
 
 package org.apache.livy.thriftserver
 
+import java.net.URI
 import java.util.{Map => JMap, UUID}
 import java.util.concurrent.ConcurrentHashMap
 
@@ -154,7 +155,7 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
     // Note: if this is an already existing session, adding the JARs multiple times is not a
     // problem as Spark ignores JARs which have already been added.
     try {
-      livySession.addJar(LivyThriftSessionManager.JAR_LOCATION.toURI)
+      livySession.addJar(LivyThriftSessionManager.thriftserverJarLocation(server.livyConf))
     } catch {
       case e: java.util.concurrent.ExecutionException
           if Option(e.getCause).forall(_.getMessage.contains("has already been uploaded")) =>
@@ -243,7 +244,12 @@ object LivyThriftSessionManager extends Logging {
   // variable
   private val livySessionIdConfigKey = "set:hiveconf:livy.server.sessionId"
   private val livySessionConfRegexp = "set:hiveconf:livy.session.conf.(.*)".r
-  private val JAR_LOCATION = getClass.getProtectionDomain.getCodeSource.getLocation
+  private val JAR_LOCATION = getClass.getProtectionDomain.getCodeSource.getLocation.toURI
+
+  def thriftserverJarLocation(livyConf: LivyConf): URI = {
+    Option(livyConf.get(LivyConf.THRIFT_SERVER_JAR_LOCATION)).map(new URI(_))
+      .getOrElse(JAR_LOCATION)
+  }
 
   private def convertConfValueToInt(key: String, value: String) = {
     val res = Try(value.toInt)
