@@ -543,29 +543,6 @@ public class CLIService extends CompositeService implements ICLIService {
     return rowSet;
   }
 
-  // obtain delegation token for the give user from metastore
-  // TODO: why is this synchronized?
-  public synchronized String getDelegationTokenFromMetaStore(String owner)
-      throws HiveSQLException, UnsupportedOperationException, LoginException, IOException {
-    HiveConf hiveConf = getHiveConf();
-    if (!hiveConf.getBoolVar(HiveConf.ConfVars.METASTORE_USE_THRIFT_SASL) ||
-        !hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ENABLE_DOAS)) {
-      throw new UnsupportedOperationException(
-          "delegation token is can only be obtained for a secure remote metastore");
-    }
-
-    try {
-      Hive.closeCurrent();
-      return Hive.get(hiveConf).getDelegationToken(owner, owner);
-    } catch (HiveException e) {
-      if (e.getCause() instanceof UnsupportedOperationException) {
-        throw (UnsupportedOperationException)e.getCause();
-      } else {
-        throw new HiveSQLException("Error connect metastore to setup impersonation", e);
-      }
-    }
-  }
-
   @Override
   public String getDelegationToken(SessionHandle sessionHandle, HiveAuthFactory authFactory,
       String owner, String renewer) throws HiveSQLException {

@@ -469,9 +469,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     SessionHandle sessionHandle;
     if (cliService.getHiveConf().getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
         (userName != null)) {
-      String delegationTokenStr = getDelegationToken(userName);
       sessionHandle = cliService.openSessionWithImpersonation(protocol, userName,
-          req.getPassword(), ipAddress, req.getConfiguration(), delegationTokenStr);
+          req.getPassword(), ipAddress, req.getConfiguration(), null);
     } else {
       sessionHandle = cliService.openSession(protocol, userName, req.getPassword(),
           ipAddress, req.getConfiguration());
@@ -486,17 +485,6 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     SessionState state = operation.getParentSession().getSessionState();
     ProgressMonitor monitor = state.getProgressMonitor();
     return monitor == null ? 0.0 : monitor.progressedPercentage();
-  }
-
-  private String getDelegationToken(String userName)
-      throws HiveSQLException, LoginException, IOException {
-    try {
-      return cliService.getDelegationTokenFromMetaStore(userName);
-    } catch (UnsupportedOperationException e) {
-      // The delegation token is not applicable in the given deployment mode
-      // such as HMS is not kerberos secured
-    }
-    return null;
   }
 
   private TProtocolVersion getMinVersion(TProtocolVersion... versions) {
