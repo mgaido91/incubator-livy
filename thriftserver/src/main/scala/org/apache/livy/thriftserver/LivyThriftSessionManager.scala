@@ -169,8 +169,6 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
       val statementId = UUID.randomUUID().toString
       try {
         rpcClient.executeSql(sessionHandle, statementId, statement).get()
-      } catch {
-        case e: Exception => warn(s"Unable to run: $statement", e)
       } finally {
         Try(rpcClient.cleanupStatement(statementId).get()).failed.foreach { e =>
           error(s"Failed to close init operation $statementId", e)
@@ -203,22 +201,14 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
       onLivySessionOpened(newSession)
       newSession
     }
-    val futureLivySession = Future(
-      getOrCreateLivySession(sessionHandle, sessionId, username, createLivySession))
-    val futureInitSession = futureLivySession.andThen {
-      case Success(livySession) =>
-        incrementManagedSessionActiveUsers(livySession.id)
-        Try(initSession(sessionHandle, livySession, initStatements)) match {
-          case Failure(e) =>
-            warn(s"Init session $sessionHandle failed.", e)
-            Try(closeSession(sessionHandle)).failed.foreach { e =>
-              warn(s"Closing session $sessionHandle failed.", e)
-            }
-          case _ => // do nothing
-        }
-      case Failure(_) => // do nothing
-    }
-    sessionHandleToLivySession.put(sessionHandle, futureInitSession)
+    val futureLivySession = Future({
+      val livySession =
+        getOrCreateLivySession(sessionHandle, sessionId, username, createLivySession)
+      incrementManagedSessionActiveUsers(livySession.id)
+      initSession(sessionHandle, livySession, initStatements)
+      livySession
+    })
+    sessionHandleToLivySession.put(sessionHandle, futureLivySession)
     sessionHandle
   }
 
@@ -229,10 +219,8 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
       case Some(Success(interactiveSession)) =>
         onUserSessionClosed(sessionHandle, interactiveSession)
       case None =>
-        Try(Await.result(removedSession, maxSessionWait)) match {
-          case Success(interactiveSession) =>
-            onUserSessionClosed(sessionHandle, interactiveSession)
-          case _ => // nothing to do
+        removedSession.onSuccess {
+          case interactiveSession => onUserSessionClosed(sessionHandle, interactiveSession)
         }
       case _ => // nothing to do
     }
