@@ -90,6 +90,10 @@
                     <groupId>org.eclipse.jetty</groupId>
                     <artifactId>jetty-util</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
         <dependency>
@@ -156,6 +160,12 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- we need a version > 1.7.13 because of SLF4J-324 -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.7.25</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.thrift</groupId>
             <artifactId>libthrift</artifactId>
@@ -219,6 +229,13 @@
                         <goals>
                             <goal>copy-dependencies</goal>
                         </goals>
+                        <configuration>
+                            <excludeArtifactIds>
+                                jetty-util,
+                                jetty-xml,
+                                jetty-webapp
+                            </excludeArtifactIds>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
