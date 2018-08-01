@@ -25,6 +25,9 @@ import java.util.concurrent.RejectedExecutionException
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.hive.common.LogUtils
+import org.apache.hadoop.hive.ql.log.PerfLogger
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.thrift.ColumnBuffer
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
@@ -88,12 +91,17 @@ class LivyExecuteStatementOperation(
         override def run(): Unit = {
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
+              SessionState.setCurrentSessionState(parentSession.getSessionState)
+              PerfLogger.setPerfLogger(SessionState.getPerfLogger)
+              LogUtils.registerLoggingContext(queryState.getConf)
               try {
                 execute()
               } catch {
                 case e: HiveSQLException =>
                   setOperationException(e)
                   error("Error running hive query: ", e)
+              } finally {
+                LogUtils.unregisterLoggingContext()
               }
             }
           }
