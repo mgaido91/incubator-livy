@@ -17,6 +17,8 @@
 
 package org.apache.livy.thriftserver
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.server.HiveServer2
 import org.scalatra.ScalatraServlet
@@ -37,6 +39,19 @@ object LivyThriftServer extends Logging {
   private var thriftServerThread: Thread = _
   private var thriftServer: LivyThriftServer = _
 
+  private def hiveConf(livyConf: LivyConf): HiveConf = {
+    val conf = new HiveConf()
+    // Remove all configs coming from hive-site.xml which may be in the classpath for the Spark
+    // applications to run.
+    conf.clear()
+    livyConf.asScala.foreach {
+      case nameAndValue if nameAndValue.getKey.startsWith("livy.hive") =>
+        conf.set(nameAndValue.getKey.stripPrefix("livy."), nameAndValue.getValue)
+      case _ => // Ignore
+    }
+    conf
+  }
+
   def start(
       livyConf: LivyConf,
       livySessionManager: InteractiveSessionManager,
@@ -52,7 +67,7 @@ object LivyThriftServer extends Logging {
               livySessionManager,
               sessionStore,
               accessManager)
-            thriftServer.init(new HiveConf())
+            thriftServer.init(hiveConf(livyConf))
             thriftServer.start()
             info("LivyThriftServer started")
           } catch {
