@@ -175,5 +175,6 @@ class LivyExecuteStatementOperation(
       rpcClient.cleanupStatement(statementId).get()
     }
     setState(state)
+    cleanupOperationLog()
   }
 }
