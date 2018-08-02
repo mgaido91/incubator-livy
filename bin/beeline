@@ -18,6 +18,14 @@
 export LIVY_HOME=$(cd $(dirname $0)/.. && pwd)
 CLASS="org.apache.hive.beeline.BeeLine"
 
+LIVY_CONF_DIR=${LIVY_CONF_DIR:-"$LIVY_HOME/conf"}
+
+if [ -f "${LIVY_CONF_DIR}/livy-env.sh" ]; then
+  # Promote all variable declarations to environment (exported) variables
+  set -a
+  . "${LIVY_CONF_DIR}/livy-env.sh"
+  set +a
+fi
 
 # Find the java binary
 if [ -n "${JAVA_HOME}" ]; then
