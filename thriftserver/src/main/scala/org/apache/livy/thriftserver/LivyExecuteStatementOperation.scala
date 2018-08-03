@@ -20,8 +20,9 @@ package org.apache.livy.thriftserver
 import java.security.PrivilegedExceptionAction
 import java.util
 import java.util.{Map => JMap}
-import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.{ConcurrentLinkedQueue, RejectedExecutionException}
 
+import scala.collection.mutable
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
@@ -35,7 +36,6 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.livy.Logging
-import org.apache.livy.server.interactive.InteractiveSession
 import org.apache.livy.thriftserver.rpc.RpcClient
 import org.apache.livy.thriftserver.types.DataTypeUtils._
 
@@ -44,10 +44,23 @@ class LivyExecuteStatementOperation(
     statement: String,
     confOverlay: JMap[String, String],
     runInBackground: Boolean = true,
-    livySession: InteractiveSession)
+    livyThriftSessionManager: LivyThriftSessionManager)
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
     with Logging {
-  private val rpcClient = new RpcClient(livySession)
+
+  /**
+   * Contains the messages which have to be sent to the client.
+   */
+  private val operationMessages = new ConcurrentLinkedQueue[String]
+
+  // The initialization need to be lazy in order not to block when the instance is created
+  private lazy val rpcClient = {
+    if (livyThriftSessionManager.livySessionId(parentSession.getSessionHandle).isEmpty) {
+      operationMessages.offer(
+        "Livy session has not yet started. Please wait for it to be ready...")
+    }
+    new RpcClient(livyThriftSessionManager.getLivySession(parentSession.getSessionHandle))
+  }
   private var rowOffset = 0L
 
   private def statementId: String = getHandle.getHandleIdentifier.toString
@@ -136,7 +149,6 @@ class LivyExecuteStatementOperation(
 
   protected def execute(): Unit = {
     info(s"Running query '$statement' with id $statementId")
-
     setState(OperationState.RUNNING)
 
     try {
@@ -176,5 +188,24 @@ class LivyExecuteStatementOperation(
     }
     setState(state)
     cleanupOperationLog()
+  }
+
+  /**
+   * Returns the messages that should be sent to the client and removes them from the queue in
+   * order not to send them twice.
+   */
+  def getOperationMessages: Seq[String] = {
+    val fetchNext: (mutable.ListBuffer[String]) => Boolean = (acc: mutable.ListBuffer[String]) => {
+      val m = operationMessages.poll()
+      if (m == null) {
+        false
+      } else {
+        acc += m
+        true
+      }
+    }
+    val res = new mutable.ListBuffer[String]
+    while (fetchNext(res)) {}
+    res
   }
 }
