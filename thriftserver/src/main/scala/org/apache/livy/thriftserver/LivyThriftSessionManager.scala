@@ -37,6 +37,7 @@ import org.apache.livy.LivyConf
 import org.apache.livy.Logging
 import org.apache.livy.server.interactive.{CreateInteractiveRequest, InteractiveSession}
 import org.apache.livy.sessions.Spark
+import org.apache.livy.thriftserver.SessionStates._
 import org.apache.livy.thriftserver.rpc.RpcClient
 
 class LivyThriftSessionManager(val server: LivyThriftServer)
@@ -69,6 +70,14 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
 
   def livySessionId(sessionHandle: SessionHandle): Option[Int] = {
     sessionHandleToLivySession.get(sessionHandle).value.filter(_.isSuccess).map(_.get.id)
+  }
+
+  def livySessionState(sessionHandle: SessionHandle): SessionStates = {
+    sessionHandleToLivySession.get(sessionHandle).value match {
+      case Some(Success(_)) => CREATION_SUCCESS
+      case Some(Failure(_)) => CREATION_FAILED
+      case None => CREATION_IN_PROGRESS
+    }
   }
 
   def numberOfActiveUsers(livySessionId: Int): Int = synchronized[Int] {

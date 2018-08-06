@@ -36,6 +36,7 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.livy.Logging
+import org.apache.livy.thriftserver.SessionStates._
 import org.apache.livy.thriftserver.rpc.RpcClient
 import org.apache.livy.thriftserver.types.DataTypeUtils._
 
@@ -44,7 +45,7 @@ class LivyExecuteStatementOperation(
     statement: String,
     confOverlay: JMap[String, String],
     runInBackground: Boolean = true,
-    livyThriftSessionManager: LivyThriftSessionManager)
+    sessionManager: LivyThriftSessionManager)
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
     with Logging {
 
@@ -55,15 +56,21 @@ class LivyExecuteStatementOperation(
 
   // The initialization need to be lazy in order not to block when the instance is created
   private lazy val rpcClient = {
-    if (livyThriftSessionManager.livySessionId(parentSession.getSessionHandle).isEmpty) {
+    val sessionState = sessionManager.livySessionState(parentSession.getSessionHandle)
+    if (sessionState == CREATION_IN_PROGRESS) {
       operationMessages.offer(
         "Livy session has not yet started. Please wait for it to be ready...")
     }
-    new RpcClient(livyThriftSessionManager.getLivySession(parentSession.getSessionHandle))
+    // This call is blocking, we are waiting for the session to be ready.
+    new RpcClient(sessionManager.getLivySession(parentSession.getSessionHandle))
   }
   private var rowOffset = 0L
 
   private def statementId: String = getHandle.getHandleIdentifier.toString
+
+  private def rpcClientValid: Boolean =
+    sessionManager.livySessionState(parentSession.getSessionHandle) == CREATION_SUCCESS &&
+      rpcClient.isValid
 
   override def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
     validateDefaultFetchOrientation(order)
@@ -183,7 +190,7 @@ class LivyExecuteStatementOperation(
   }
 
   private def cleanup(state: OperationState) {
-    if (statementId != null && rpcClient.isValid) {
+    if (statementId != null && rpcClientValid) {
       rpcClient.cleanupStatement(statementId).get()
     }
     setState(state)
