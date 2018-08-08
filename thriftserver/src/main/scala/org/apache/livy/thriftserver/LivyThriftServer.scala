@@ -43,7 +43,9 @@ object LivyThriftServer extends Logging {
     val conf = new HiveConf()
     // Remove all configs coming from hive-site.xml which may be in the classpath for the Spark
     // applications to run.
-    conf.clear()
+    conf.getAllProperties.asScala.filter(_._1.startsWith("hive.")).foreach { case (key, _) =>
+      conf.unset(key)
+    }
     livyConf.asScala.foreach {
       case nameAndValue if nameAndValue.getKey.startsWith("livy.hive") =>
         conf.set(nameAndValue.getKey.stripPrefix("livy."), nameAndValue.getValue)
