@@ -164,11 +164,10 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        <!-- we need a version > 1.7.13 because of SLF4J-324 -->
+
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>1.7.25</version>
         </dependency>
         <dependency>
             <groupId>org.apache.thrift</groupId>

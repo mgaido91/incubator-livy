@@ -89,7 +89,7 @@
     <httpcore.version>4.4.4</httpcore.version>
     <jackson.version>2.9.5</jackson.version>
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
-    <jetty.version>9.2.16.v20160414</jetty.version>
+    <jetty.version>9.3.8.v20160314</jetty.version>
     <json4s.version>3.2.10</json4s.version>
     <junit.version>4.11</junit.version>
     <kryo.version>2.22</kryo.version>
@@ -574,10 +574,11 @@
         <version>${py4j.version}</version>
       </dependency>
 
+      <!-- we need a version > 1.7.13 because of SLF4J-324 -->
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
-        <version>1.7.0</version>
+        <version>1.7.25</version>
       </dependency>
 
     </dependencies>
