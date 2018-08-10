@@ -18,11 +18,22 @@
 package org.apache.livy.thriftserver
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hive.service.cli.CLIService
+import org.apache.hive.service.cli.{CLIService, GetInfoType, GetInfoValue, SessionHandle}
+
+import org.apache.livy.LIVY_VERSION
 
 class LivyCLIService(server: LivyThriftServer) extends CLIService(server) {
   override def init(hiveConf: HiveConf): Unit = {
     this.sessionManager = new LivyThriftSessionManager(server)
     super.init(hiveConf)
+  }
+
+  override def getInfo(sessionHandle: SessionHandle, getInfoType: GetInfoType): GetInfoValue = {
+    getInfoType match {
+      case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Livy JDBC")
+      case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Livy JDBC")
+      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(LIVY_VERSION)
+      case _ => super.getInfo(sessionHandle, getInfoType)
+    }
   }
 }
