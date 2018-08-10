@@ -250,6 +250,54 @@
                     <outputDirectory>${project.build.directory}/jars</outputDirectory>
                 </configuration>
             </plugin>
+
+            <plugin>
+                <groupId>com.googlecode.maven-download-plugin</groupId>
+                <artifactId>download-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>download-spark-files</id>
+                        <goals>
+                            <goal>wget</goal>
+                        </goals>
+                        <configuration>
+                            <readTimeOut>60000</readTimeOut>
+                            <retries>5</retries>
+                            <url>${spark.bin.download.url}</url>
+                            <outputDirectory>${project.build.directory}</outputDirectory>
+                            <unpack>true</unpack>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.scalatest</groupId>
+                <artifactId>scalatest-maven-plugin</artifactId>
+                <executions>
+                    <!-- Unbind integration test from test phase and bind it to integration-test phase -->
+                    <execution>
+                        <id>test</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>integration-test</id>
+                        <phase>integration-test</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <environmentVariables>
+                        <LIVY_HOME>${execution.root}</LIVY_HOME>
+                        <LIVY_TEST>false</LIVY_TEST>
+                        <LIVY_INTEGRATION_TEST>true</LIVY_INTEGRATION_TEST>
+                        <SPARK_HOME>${project.build.directory}/${spark.bin.name}</SPARK_HOME>
+                    </environmentVariables>
+                    <skipTests>${skipITs}</skipTests>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>

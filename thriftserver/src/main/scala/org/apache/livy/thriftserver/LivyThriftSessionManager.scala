@@ -39,6 +39,7 @@ import org.apache.livy.server.interactive.{CreateInteractiveRequest, Interactive
 import org.apache.livy.sessions.Spark
 import org.apache.livy.thriftserver.SessionStates._
 import org.apache.livy.thriftserver.rpc.RpcClient
+import org.apache.livy.utils.LivySparkUtils
 
 class LivyThriftSessionManager(val server: LivyThriftServer)
   extends SessionManager(server) with Logging {
@@ -49,6 +50,12 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
   private val maxSessionWait = Duration(
     server.livyConf.getTimeAsMs(LivyConf.THRIFT_SESSION_CREATION_TIMEOUT),
     scala.concurrent.duration.MILLISECONDS)
+
+  val supportUseDatabase: Boolean = {
+    val sparkVersion = server.livyConf.get(LivyConf.LIVY_SPARK_VERSION)
+    val (sparkMajorVersion, _) = LivySparkUtils.formatSparkVersion(sparkVersion)
+    sparkMajorVersion > 1 || server.livyConf.getBoolean(LivyConf.ENABLE_HIVE_CONTEXT)
+  }
 
   def getLivySession(sessionHandle: SessionHandle): InteractiveSession = {
     val future = sessionHandleToLivySession.get(sessionHandle)
@@ -197,7 +204,7 @@ class LivyThriftSessionManager(val server: LivyThriftServer)
     val sessionHandle = super.openSession(
       protocol, username, password, ipAddress, sessionConf, withImpersonation, delegationToken)
     val (initStatements, createInteractiveRequest, sessionId) =
-      LivyThriftSessionManager.processSessionConf(sessionConf)
+      LivyThriftSessionManager.processSessionConf(sessionConf, supportUseDatabase)
     val createLivySession = () => {
       createInteractiveRequest.kind = Spark
       val newSession = InteractiveSession.create(
@@ -258,8 +265,9 @@ object LivyThriftSessionManager extends Logging {
     }
   }
 
-  private def processSessionConf(sessionConf: JMap[String, String]):
-      (List[String], CreateInteractiveRequest, Option[Int]) = {
+  private def processSessionConf(
+      sessionConf: JMap[String, String],
+      supportUseDatabase: Boolean): (List[String], CreateInteractiveRequest, Option[Int]) = {
     if (null != sessionConf && !sessionConf.isEmpty) {
       val statements = new mutable.ListBuffer[String]
       val extraLivyConf = new mutable.ListBuffer[(String, String)]
@@ -267,7 +275,8 @@ object LivyThriftSessionManager extends Logging {
       sessionConf.asScala.foreach {
         case (key, value) =>
           key match {
-            case v if v.startsWith("use:") => statements += s"use $value"
+            case v if v.startsWith("use:") && supportUseDatabase =>
+              statements += s"use $value"
             // Process session configs for Livy session creation request
             case "set:hiveconf:livy.session.driverMemory" =>
               createInteractiveRequest.driverMemory = Some(value)

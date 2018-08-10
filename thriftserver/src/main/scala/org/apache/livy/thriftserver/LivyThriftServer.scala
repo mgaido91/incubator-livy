@@ -36,7 +36,8 @@ import org.apache.livy.thriftserver.ui.ThriftUIServlet
  */
 object LivyThriftServer extends Logging {
 
-  private var thriftServerThread: Thread = _
+  // Visible for testing
+  private[thriftserver] var thriftServerThread: Thread = _
   private var thriftServer: LivyThriftServer = _
 
   private def hiveConf(livyConf: LivyConf): HiveConf = {
@@ -91,6 +92,16 @@ object LivyThriftServer extends Logging {
   }
 
   def getUI(basePath: String): ScalatraServlet = new ThriftUIServlet(basePath)
+
+  // Used in testing
+  def stopServer(): Unit = {
+    if (thriftServerThread != null) {
+      thriftServerThread.join()
+    }
+    thriftServerThread = null
+    thriftServer.stop()
+    thriftServer = null
+  }
 }
 
 
