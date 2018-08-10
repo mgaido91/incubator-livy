@@ -132,7 +132,7 @@ object RpcClient {
           Try(jc.getSharedObject[HashMap[String, AnyRef]](SPARK_CONTEXT_MAP))
             .getOrElse(new HashMap[String, AnyRef]())
         jc.setSharedObject(SPARK_CONTEXT_MAP,
-          existingMap + (sessionId -> sessionSpecificSpark))
+          existingMap + ((sessionId, sessionSpecificSpark)))
         Try(jc.getSharedObject[HashMap[String, String]](STATEMENT_SCHEMA_MAP))
           .failed.foreach { _ =>
           jc.setSharedObject(STATEMENT_SCHEMA_MAP, new HashMap[String, String]())
@@ -236,7 +236,7 @@ object RpcClient {
         // Set the schema in the shared map
         sparkContext.synchronized {
           val existingMap = jc.getSharedObject[HashMap[String, String]](STATEMENT_SCHEMA_MAP)
-          jc.setSharedObject(STATEMENT_SCHEMA_MAP, existingMap + (statementId -> jsonString))
+          jc.setSharedObject(STATEMENT_SCHEMA_MAP, existingMap + ((statementId, jsonString)))
         }
 
         val incrementalCollect = {
@@ -267,7 +267,7 @@ object RpcClient {
         sparkContext.synchronized {
           val existingMap =
             jc.getSharedObject[HashMap[String, Iterator[_]]](STATEMENT_RESULT_ITER_MAP)
-          jc.setSharedObject(STATEMENT_RESULT_ITER_MAP, existingMap + (statementId -> iter))
+          jc.setSharedObject(STATEMENT_RESULT_ITER_MAP, existingMap + ((statementId, iter)))
         }
       } catch {
         case e: InvocationTargetException => throw e.getCause
