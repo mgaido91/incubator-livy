@@ -23,6 +23,7 @@ import java.sql.{Connection, DriverManager, Statement}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.jdbc.HiveDriver
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
+
 import org.apache.livy.LIVY_VERSION
 import org.apache.livy.LivyConf
 import org.apache.livy.LivyConf.{LIVY_SPARK_SCALA_VERSION, LIVY_SPARK_VERSION}

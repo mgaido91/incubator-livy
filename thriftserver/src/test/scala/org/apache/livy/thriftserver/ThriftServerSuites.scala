@@ -54,7 +54,7 @@ trait CommonThriftTests {
 
 class BinaryThriftServerSuite extends ThriftServerBaseTest with CommonThriftTests {
   override def mode: ServerMode.Value = ServerMode.binary
-  override def port = 10001
+  override def port: Int = 10001
 
   test("Reuse existing session") {
     withJdbcConnection { _ =>
