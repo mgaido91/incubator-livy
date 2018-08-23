@@ -23,22 +23,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
 
-import javax.servlet.ServletContextEvent;
-import javax.servlet.ServletContextListener;
 import javax.ws.rs.HttpMethod;
 
-import org.apache.hadoop.hive.common.metrics.common.Metrics;
-import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
-import org.apache.hadoop.hive.common.metrics.common.MetricsFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.service.auth.HiveAuthFactory;
-import org.apache.hive.service.cli.CLIService;
+import org.apache.hive.service.cli.ICLIService;
 import org.apache.hive.service.rpc.thrift.TCLIService;
 import org.apache.hive.service.rpc.thrift.TCLIService.Iface;
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
+import org.apache.livy.thriftserver.LivyCLIService;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocolFactory;
@@ -59,7 +55,7 @@ public class ThriftHttpCLIService extends ThriftCLIService {
   protected org.eclipse.jetty.server.Server server;
 
   private final Runnable oomHook;
-  public ThriftHttpCLIService(CLIService cliService, Runnable oomHook) {
+  public ThriftHttpCLIService(ICLIService cliService, Runnable oomHook) {
     super(cliService, ThriftHttpCLIService.class.getSimpleName());
     this.oomHook = oomHook;
   }
@@ -137,9 +133,9 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       TProtocolFactory protocolFactory = new TBinaryProtocol.Factory();
       // Set during the init phase of HiveServer2 if auth mode is kerberos
       // UGI for the hive/_HOST (kerberos) principal
-      UserGroupInformation serviceUGI = cliService.getServiceUGI();
+      UserGroupInformation serviceUGI = ((LivyCLIService) cliService).getServiceUGI();
       // UGI for the http/_HOST (SPNego) principal
-      UserGroupInformation httpUGI = cliService.getHttpUGI();
+      UserGroupInformation httpUGI = ((LivyCLIService) cliService).getHttpUGI();
       String authType = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION);
       TServlet thriftHttpServlet = new ThriftHttpServlet(processor, protocolFactory, authType, serviceUGI, httpUGI,
           hiveAuthFactory);
@@ -155,33 +151,6 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       } else {
         LOG.warn("XSRF filter disabled");
       }
-
-      context.addEventListener(new ServletContextListener() {
-        @Override
-        public void contextInitialized(ServletContextEvent servletContextEvent) {
-          Metrics metrics = MetricsFactory.getInstance();
-          if (metrics != null) {
-            try {
-              metrics.incrementCounter(MetricsConstant.OPEN_CONNECTIONS);
-              metrics.incrementCounter(MetricsConstant.CUMULATIVE_CONNECTION_COUNT);
-            } catch (Exception e) {
-              LOG.warn("Error reporting HS2 open connection operation to Metrics system", e);
-            }
-          }
-        }
-
-        @Override
-        public void contextDestroyed(ServletContextEvent servletContextEvent) {
-          Metrics metrics = MetricsFactory.getInstance();
-          if (metrics != null) {
-            try {
-              metrics.decrementCounter(MetricsConstant.OPEN_CONNECTIONS);
-            } catch (Exception e) {
-              LOG.warn("Error reporting HS2 close connection operation to Metrics system", e);
-            }
-          }
-        }
-      });
 
       final String httpPath = getHttpPath(hiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_HTTP_PATH));
 

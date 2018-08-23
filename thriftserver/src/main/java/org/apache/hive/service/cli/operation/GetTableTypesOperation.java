@@ -23,17 +23,11 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.TableType;
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
-import org.apache.hive.service.cli.FetchOrientation;
-import org.apache.hive.service.cli.HiveSQLException;
-import org.apache.hive.service.cli.OperationState;
-import org.apache.hive.service.cli.OperationType;
-import org.apache.hive.service.cli.RowSet;
-import org.apache.hive.service.cli.RowSetFactory;
-import org.apache.hive.service.cli.TableSchema;
-import org.apache.hive.service.cli.session.HiveSession;
+import org.apache.hive.service.cli.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.livy.thriftserver.LivyThriftServer$;
 
 /**
  * GetTableTypesOperation.
@@ -49,10 +43,10 @@ public class GetTableTypesOperation extends MetadataOperation {
   private final RowSet rowSet;
   private final TableTypeMapping tableTypeMapping;
 
-  protected GetTableTypesOperation(HiveSession parentSession) {
-    super(parentSession, OperationType.GET_TABLE_TYPES);
-    String tableMappingStr =
-        getParentSession().getHiveConf().getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING);
+  public GetTableTypesOperation(SessionHandle sessionHandle) {
+    super(sessionHandle, OperationType.GET_TABLE_TYPES);
+    String tableMappingStr = LivyThriftServer$.MODULE$.getInstance().get().getHiveConf()
+        .getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING);
     tableTypeMapping = TableTypeMappingFactory.getTableTypeMapping(tableMappingStr);
     rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
     LOG.info("Starting GetTableTypesOperation");
@@ -62,9 +56,6 @@ public class GetTableTypesOperation extends MetadataOperation {
   public void runInternal() throws HiveSQLException {
     setState(OperationState.RUNNING);
     LOG.info("Fetching table type metadata");
-    if (isAuthV2Enabled()) {
-      authorizeMetaGets(HiveOperationType.GET_TABLETYPES, null);
-    }
     try {
       for (TableType type : TableType.values()) {
         String tableType = tableTypeMapping.mapToClientType(type.toString());

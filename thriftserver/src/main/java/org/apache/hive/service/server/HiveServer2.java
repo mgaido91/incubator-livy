@@ -37,9 +37,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hive.common.util.HiveStringUtils;
 import org.apache.hive.common.util.ShutdownHookManager;
 import org.apache.hive.service.CompositeService;
-import org.apache.hive.service.cli.CLIService;
-import org.apache.hive.service.cli.HiveSQLException;
-import org.apache.hive.service.cli.session.HiveSession;
+import org.apache.hive.service.cli.ICLIService;
 import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.hive.service.cli.thrift.ThriftHttpCLIService;
@@ -53,7 +51,7 @@ import org.slf4j.LoggerFactory;
 public class HiveServer2 extends CompositeService {
   private static final Logger LOG = LoggerFactory.getLogger(HiveServer2.class);
   public static final String INSTANCE_URI_CONFIG = "hive.server2.instance.uri";
-  protected CLIService cliService;
+  protected ICLIService cliService;
   protected ThriftCLIService thriftCLIService;
 
   public HiveServer2() {
@@ -63,10 +61,9 @@ public class HiveServer2 extends CompositeService {
 
   @Override
   public synchronized void init(HiveConf hiveConf) {
-    if (cliService == null) {
-      cliService = new CLIService(this);
-    }
-    addService(cliService);
+    assert cliService != null;
+    assert cliService instanceof CompositeService;
+    addService((CompositeService) cliService);
     final HiveServer2 hiveServer2 = this;
     Runnable oomHook = new Runnable() {
       @Override
@@ -109,10 +106,6 @@ public class HiveServer2 extends CompositeService {
     return false;
   }
 
-  public int getOpenSessionsCount() {
-    return cliService != null ? cliService.getSessionManager().getOpenSessionCount() : 0;
-  }
-
   public String getServerHost() throws Exception {
     if ((thriftCLIService == null) || (thriftCLIService.getServerIPAddress() == null)) {
       throw new Exception("Unable to get the server address; it hasn't been initialized yet.");
@@ -123,21 +116,6 @@ public class HiveServer2 extends CompositeService {
   @Override
   public synchronized void start() {
     super.start();
-  }
-
-
-  private void closeHiveSessions() {
-    LOG.info("Closing all open hive sessions.");
-    if (cliService != null && cliService.getSessionManager().getOpenSessionCount() > 0) {
-      try {
-        for (HiveSession session : cliService.getSessionManager().getSessions()) {
-          cliService.getSessionManager().closeSession(session.getSessionHandle());
-        }
-        LOG.info("Closed all open hive sessions");
-      } catch (HiveSQLException e) {
-        LOG.error("Unable to close all open sessions.", e);
-      }
-    }
   }
 
   @Override

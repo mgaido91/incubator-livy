@@ -26,14 +26,10 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.hive.common.LogUtils
-import org.apache.hadoop.hive.ql.log.PerfLogger
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.thrift.ColumnBuffer
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.ExecuteStatementOperation
-import org.apache.hive.service.cli.session.HiveSession
+import org.apache.hive.service.cli.operation.Operation
 
 import org.apache.livy.Logging
 import org.apache.livy.thriftserver.SessionStates._
@@ -41,12 +37,12 @@ import org.apache.livy.thriftserver.rpc.RpcClient
 import org.apache.livy.thriftserver.types.DataTypeUtils._
 
 class LivyExecuteStatementOperation(
-    parentSession: HiveSession,
+    sessionHandle: SessionHandle,
     statement: String,
     confOverlay: JMap[String, String],
     runInBackground: Boolean = true,
     sessionManager: LivyThriftSessionManager)
-  extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
+  extends Operation(sessionHandle, confOverlay, OperationType.EXECUTE_STATEMENT)
     with Logging {
 
   /**
@@ -56,21 +52,20 @@ class LivyExecuteStatementOperation(
 
   // The initialization need to be lazy in order not to block when the instance is created
   private lazy val rpcClient = {
-    val sessionState = sessionManager.livySessionState(parentSession.getSessionHandle)
+    val sessionState = sessionManager.livySessionState(sessionHandle)
     if (sessionState == CREATION_IN_PROGRESS) {
       operationMessages.offer(
         "Livy session has not yet started. Please wait for it to be ready...")
     }
     // This call is blocking, we are waiting for the session to be ready.
-    new RpcClient(sessionManager.getLivySession(parentSession.getSessionHandle))
+    new RpcClient(sessionManager.getLivySession(sessionHandle))
   }
   private var rowOffset = 0L
 
   private def statementId: String = getHandle.getHandleIdentifier.toString
 
   private def rpcClientValid: Boolean =
-    sessionManager.livySessionState(parentSession.getSessionHandle) == CREATION_SUCCESS &&
-      rpcClient.isValid
+    sessionManager.livySessionState(sessionHandle) == CREATION_SUCCESS && rpcClient.isValid
 
   override def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
     validateDefaultFetchOrientation(order)
@@ -111,17 +106,12 @@ class LivyExecuteStatementOperation(
         override def run(): Unit = {
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
-              SessionState.setCurrentSessionState(parentSession.getSessionState)
-              PerfLogger.setPerfLogger(SessionState.getPerfLogger)
-              LogUtils.registerLoggingContext(queryState.getConf)
               try {
                 execute()
               } catch {
                 case e: HiveSQLException =>
                   setOperationException(e)
                   error("Error running hive query: ", e)
-              } finally {
-                LogUtils.unregisterLoggingContext()
               }
             }
           }
@@ -138,8 +128,7 @@ class LivyExecuteStatementOperation(
       }
       try {
         // This submit blocks if no background threads are available to run this operation
-        val backgroundHandle =
-          parentSession.getSessionManager.submitBackgroundOperation(backgroundOperation)
+        val backgroundHandle = sessionManager.submitBackgroundOperation(backgroundOperation)
         setBackgroundHandle(backgroundHandle)
       } catch {
         case rejected: RejectedExecutionException =>
@@ -159,7 +148,7 @@ class LivyExecuteStatementOperation(
     setState(OperationState.RUNNING)
 
     try {
-      rpcClient.executeSql(parentSession.getSessionHandle, statementId, statement).get()
+      rpcClient.executeSql(sessionHandle, statementId, statement).get()
     } catch {
       case e: Throwable =>
         val currentState = getStatus.getState
@@ -194,7 +183,6 @@ class LivyExecuteStatementOperation(
       rpcClient.cleanupStatement(statementId).get()
     }
     setState(state)
-    cleanupOperationLog()
   }
 
   /**

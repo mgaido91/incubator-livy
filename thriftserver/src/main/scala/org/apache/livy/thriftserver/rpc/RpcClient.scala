@@ -59,6 +59,7 @@ class RpcClient(livySession: InteractiveSession) extends Logging {
       sessionHandle)
     require(null != statementId, s"Invalid statementId specified. StatementId = $statementId")
     require(null != statement, s"Invalid statement specified. StatementId = $statement")
+    livySession.recordActivity()
     rscClient.submit(executeSqlJob(sessionId(sessionHandle),
       statementId,
       statement,
@@ -73,6 +74,7 @@ class RpcClient(livySession: InteractiveSession) extends Logging {
       maxRows: Int): JobHandle[ColumnOrientedResultSet] = {
     info(s"RSC client is fetching result for statementId $statementId with $maxRows maxRows.")
     require(null != statementId, s"Invalid statementId specified. StatementId = $statementId")
+    livySession.recordActivity()
     rscClient.submit(fetchResultJob(statementId, types, maxRows))
   }
 
@@ -80,6 +82,7 @@ class RpcClient(livySession: InteractiveSession) extends Logging {
   def fetchResultSchema(statementId: String): JobHandle[String] = {
     info(s"RSC client is fetching result schema for statementId = $statementId")
     require(null != statementId, s"Invalid statementId specified. statementId = $statementId")
+    livySession.recordActivity()
     rscClient.submit(fetchResultSchemaJob(statementId))
   }
 
@@ -87,6 +90,7 @@ class RpcClient(livySession: InteractiveSession) extends Logging {
   def cleanupStatement(statementId: String, cancelJob: Boolean = false): JobHandle[_] = {
     info(s"Cleaning up remote session for statementId = $statementId")
     require(null != statementId, s"Invalid statementId specified. statementId = $statementId")
+    livySession.recordActivity()
     rscClient.submit(cleanupStatementJob(statementId))
   }
 
@@ -99,6 +103,7 @@ class RpcClient(livySession: InteractiveSession) extends Logging {
   @throws[Exception]
   def executeRegisterSession(sessionHandle: SessionHandle): JobHandle[_] = {
     info(s"RSC client is executing register session $sessionHandle")
+    livySession.recordActivity()
     rscClient.submit(registerSessionJob(sessionId(sessionHandle), isSpark1))
   }
 
@@ -108,6 +113,7 @@ class RpcClient(livySession: InteractiveSession) extends Logging {
   @throws[Exception]
   def executeUnregisterSession(sessionHandle: SessionHandle): JobHandle[_] = {
     info(s"RSC client is executing unregister session $sessionHandle")
+    livySession.recordActivity()
     rscClient.submit(unregisterSessionJob(sessionId(sessionHandle)))
   }
 }

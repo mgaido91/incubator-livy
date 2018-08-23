@@ -25,15 +25,12 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hive.common.auth.HiveAuthUtils;
-import org.apache.hadoop.hive.common.metrics.common.Metrics;
-import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
-import org.apache.hadoop.hive.common.metrics.common.MetricsFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hive.service.auth.HiveAuthFactory;
-import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.cli.HiveSQLException;
+import org.apache.hive.service.cli.ICLIService;
 import org.apache.hive.service.cli.SessionHandle;
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
 import org.apache.thrift.TProcessorFactory;
@@ -45,7 +42,6 @@ import org.apache.thrift.server.TServerEventHandler;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransport;
-import org.apache.thrift.transport.TTransportException;
 import org.apache.thrift.transport.TTransportFactory;
 
 
@@ -53,7 +49,7 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
   private final Runnable oomHook;
   protected TServer server;
 
-  public ThriftBinaryCLIService(CLIService cliService, Runnable oomHook) {
+  public ThriftBinaryCLIService(ICLIService cliService, Runnable oomHook) {
     super(cliService, ThriftBinaryCLIService.class.getSimpleName());
     this.oomHook = oomHook;
   }
@@ -107,36 +103,18 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
       server.setServerEventHandler(new TServerEventHandler() {
         @Override
         public ServerContext createContext(TProtocol input, TProtocol output) {
-          Metrics metrics = MetricsFactory.getInstance();
-          if (metrics != null) {
-            try {
-              metrics.incrementCounter(MetricsConstant.OPEN_CONNECTIONS);
-              metrics.incrementCounter(MetricsConstant.CUMULATIVE_CONNECTION_COUNT);
-            } catch (Exception e) {
-              LOG.warn("Error Reporting JDO operation to Metrics system", e);
-            }
-          }
           return new ThriftCLIServerContext();
         }
 
         @Override
         public void deleteContext(ServerContext serverContext, TProtocol input, TProtocol output) {
-          Metrics metrics = MetricsFactory.getInstance();
-          if (metrics != null) {
-            try {
-              metrics.decrementCounter(MetricsConstant.OPEN_CONNECTIONS);
-            } catch (Exception e) {
-              LOG.warn("Error Reporting JDO operation to Metrics system", e);
-            }
-          }
           ThriftCLIServerContext context = (ThriftCLIServerContext) serverContext;
           SessionHandle sessionHandle = context.getSessionHandle();
           if (sessionHandle != null) {
             LOG.info("Session disconnected without closing properly. ");
             try {
-              boolean close = cliService.getSessionManager().getSession(sessionHandle).getHiveConf()
-                  .getBoolVar(ConfVars.HIVE_SERVER2_CLOSE_SESSION_ON_DISCONNECT);
-              LOG.info((close ? "" : "Not ") + "Closing the session: " + sessionHandle);
+              boolean close = hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_CLOSE_SESSION_ON_DISCONNECT);
+              LOG.info("Closing the session: " + sessionHandle);
               if (close) {
                 cliService.closeSession(sessionHandle);
               }

@@ -17,27 +17,16 @@
  */
 package org.apache.hive.service.cli.operation;
 
-import java.io.File;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.hive.common.LogUtils;
-import org.apache.hadoop.hive.common.metrics.common.Metrics;
-import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
-import org.apache.hadoop.hive.common.metrics.common.MetricsFactory;
-import org.apache.hadoop.hive.common.metrics.common.MetricsScope;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.QueryState;
-import org.apache.hadoop.hive.ql.log.LogDivertAppender;
-import org.apache.hadoop.hive.ql.log.LogDivertAppenderForTest;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
-import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hive.service.cli.FetchOrientation;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.OperationHandle;
@@ -45,26 +34,22 @@ import org.apache.hive.service.cli.OperationState;
 import org.apache.hive.service.cli.OperationStatus;
 import org.apache.hive.service.cli.OperationType;
 import org.apache.hive.service.cli.RowSet;
+import org.apache.hive.service.cli.SessionHandle;
 import org.apache.hive.service.cli.TableSchema;
-import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
+import org.apache.livy.thriftserver.LivyThriftServer$;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Sets;
-
 public abstract class Operation {
-  protected final HiveSession parentSession;
+  protected final SessionHandle sessionHandle;
   private volatile OperationState state = OperationState.INITIALIZED;
-  private volatile MetricsScope currentStateScope;
   private final OperationHandle opHandle;
   public static final FetchOrientation DEFAULT_FETCH_ORIENTATION = FetchOrientation.FETCH_NEXT;
   public static final Logger LOG = LoggerFactory.getLogger(Operation.class.getName());
   protected boolean hasResultSet;
   protected volatile HiveSQLException operationException;
   protected volatile Future<?> backgroundHandle;
-  protected OperationLog operationLog;
-  protected boolean isOperationLogEnabled;
   private ScheduledExecutorService scheduledExecutorService;
 
   private long operationTimeout;
@@ -74,33 +59,25 @@ public abstract class Operation {
   protected long operationStart;
   protected long operationComplete;
 
-  protected final QueryState queryState;
-
   protected static final EnumSet<FetchOrientation> DEFAULT_FETCH_ORIENTATION_SET =
       EnumSet.of(FetchOrientation.FETCH_NEXT,FetchOrientation.FETCH_FIRST);
 
 
-  protected Operation(HiveSession parentSession, OperationType opType) {
-    this(parentSession, null, opType);
+  protected Operation(SessionHandle sessionHandle, OperationType opType) {
+    this(sessionHandle, null, opType);
   }
 
-  protected Operation(HiveSession parentSession,
+  protected Operation(SessionHandle sessionHandle,
       Map<String, String> confOverlay, OperationType opType) {
-    this.parentSession = parentSession;
-    this.opHandle = new OperationHandle(opType, parentSession.getProtocolVersion());
+    this.sessionHandle = sessionHandle;
+    this.opHandle = new OperationHandle(opType, sessionHandle.getProtocolVersion());
     beginTime = System.currentTimeMillis();
     lastAccessTime = beginTime;
-    operationTimeout = HiveConf.getTimeVar(parentSession.getHiveConf(),
+    HiveConf conf = LivyThriftServer$.MODULE$.getInstance().get().getHiveConf();
+    operationTimeout = HiveConf.getTimeVar(conf,
         HiveConf.ConfVars.HIVE_SERVER2_IDLE_OPERATION_TIMEOUT, TimeUnit.MILLISECONDS);
     scheduledExecutorService = Executors.newScheduledThreadPool(1);
 
-    currentStateScope = updateOperationStateMetrics(null, MetricsConstant.OPERATION_PREFIX,
-        MetricsConstant.COMPLETED_OPERATION_PREFIX, state);
-    queryState = new QueryState.Builder()
-                     .withConfOverlay(confOverlay)
-                     .withGenerateNewQueryId(true)
-                     .withHiveConf(parentSession.getHiveConf())
-                     .build();
   }
 
   public Future<?> getBackgroundHandle() {
@@ -115,8 +92,8 @@ public abstract class Operation {
     return false; // Most operations cannot run asynchronously.
   }
 
-  public HiveSession getParentSession() {
-    return parentSession;
+  public SessionHandle getSessionHandle() {
+    return sessionHandle;
   }
 
   public OperationHandle getHandle() {
@@ -150,16 +127,10 @@ public abstract class Operation {
     opHandle.setHasResultSet(hasResultSet);
   }
 
-  public OperationLog getOperationLog() {
-    return operationLog;
-  }
-
   protected final OperationState setState(OperationState newState) throws HiveSQLException {
     state.validateTransition(newState);
     OperationState prevState = state;
     this.state = newState;
-    currentStateScope = updateOperationStateMetrics(currentStateScope, MetricsConstant.OPERATION_PREFIX,
-        MetricsConstant.COMPLETED_OPERATION_PREFIX, state);
     onNewState(state, prevState);
     this.lastAccessTime = System.currentTimeMillis();
     return this.state;
@@ -204,23 +175,12 @@ public abstract class Operation {
     return state.isTerminal();
   }
 
-  protected void createOperationLog() {
-    if (parentSession.isOperationLogEnabled()) {
-      File operationLogFile = new File(parentSession.getOperationLogSessionDir(), queryState.getQueryId());
-      isOperationLogEnabled = true;
-
-      // create OperationLog object with above log file
-      operationLog = new OperationLog(opHandle.toString(), operationLogFile, parentSession.getHiveConf());
-    }
-  }
-
   /**
    * Invoked before runInternal().
    * Set up some preconditions, or configurations.
    */
   protected void beforeRun() {
-    createOperationLog();
-    LogUtils.registerLoggingContext(queryState.getConf());
+    // For Livy operations, this currently does nothing
   }
 
   /**
@@ -228,7 +188,7 @@ public abstract class Operation {
    * Clean up resources, which was set up in beforeRun().
    */
   protected void afterRun() {
-    LogUtils.unregisterLoggingContext();
+    // For Livy operations, this currently does nothing
   }
 
   /**
@@ -240,35 +200,10 @@ public abstract class Operation {
   public void run() throws HiveSQLException {
     beforeRun();
     try {
-      Metrics metrics = MetricsFactory.getInstance();
-      if (metrics != null) {
-        metrics.incrementCounter(MetricsConstant.OPEN_OPERATIONS);
-      }
       runInternal();
     } finally {
       afterRun();
     }
-  }
-
-  protected synchronized void cleanupOperationLog() {
-    // stop the appenders for the operation log
-    String queryId = queryState.getQueryId();
-    LogUtils.stopQueryAppender(LogDivertAppender.QUERY_ROUTING_APPENDER, queryId);
-    LogUtils.stopQueryAppender(LogDivertAppenderForTest.TEST_QUERY_ROUTING_APPENDER, queryId);
-    if (isOperationLogEnabled) {
-      if (opHandle == null) {
-        LOG.warn("Operation seems to be in invalid state, opHandle is null");
-        return;
-      }
-      if (operationLog == null) {
-        LOG.warn("Operation [ " + opHandle.getHandleIdentifier() + " ] " + "logging is enabled, "
-            + "but its OperationLog object cannot be found. "
-            + "Perhaps the operation has already terminated.");
-      } else {
-        operationLog.close();
-      }
-    }
-
   }
 
   public abstract void cancel(OperationState stateAfterCancel) throws HiveSQLException;
@@ -314,40 +249,6 @@ public abstract class Operation {
       ex.initCause(response.getException());
     }
     return ex;
-  }
-
-  //list of operation states to measure duration of.
-  protected static Set<OperationState> scopeStates = Sets.immutableEnumSet(
-    OperationState.INITIALIZED,
-    OperationState.PENDING,
-    OperationState.RUNNING
-  );
-
-  //list of terminal operation states.  We measure only completed counts for operations in these states.
-  protected static Set<OperationState> terminalStates = Sets.immutableEnumSet(
-    OperationState.CLOSED,
-    OperationState.CANCELED,
-    OperationState.FINISHED,
-    OperationState.ERROR,
-    OperationState.UNKNOWN
-  );
-
-  protected final MetricsScope updateOperationStateMetrics(MetricsScope stateScope, String operationPrefix,
-      String completedOperationPrefix, OperationState state) {
-    Metrics metrics = MetricsFactory.getInstance();
-    if (metrics != null) {
-      if (stateScope != null) {
-        metrics.endScope(stateScope);
-        stateScope = null;
-      }
-      if (scopeStates.contains(state)) {
-        stateScope = metrics.createScope(MetricsConstant.API_PREFIX + operationPrefix + state);
-      }
-      if (terminalStates.contains(state)) {
-        metrics.incrementCounter(completedOperationPrefix + state);
-      }
-    }
-    return stateScope;
   }
 
   public long getBeginTime() {

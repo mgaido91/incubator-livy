@@ -30,7 +30,7 @@ public class JobProgressUpdate {
   public final String status;
 
 
-  JobProgressUpdate(ProgressMonitor monitor) {
+  public JobProgressUpdate(ProgressMonitor monitor) {
     this(monitor.headers(), monitor.rows(), monitor.footerSummary(), monitor.progressedPercentage(),
         monitor.startTime(), monitor.executionStatus());
   }

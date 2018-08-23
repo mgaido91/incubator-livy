@@ -20,7 +20,6 @@ package org.apache.hive.service.cli.thrift;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.net.InetAddress;
 import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
 import java.util.Arrays;
@@ -44,7 +43,6 @@ import org.apache.hadoop.hive.shims.HadoopShims.KerberosNameShim;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticator;
 import org.apache.hive.service.CookieSigner;
 import org.apache.hive.service.auth.AuthenticationProviderFactory;
 import org.apache.hive.service.auth.AuthenticationProviderFactory.AuthMethods;
@@ -54,7 +52,6 @@ import org.apache.hive.service.auth.HttpAuthUtils;
 import org.apache.hive.service.auth.HttpAuthenticationException;
 import org.apache.hive.service.auth.PasswdAuthenticationProvider;
 import org.apache.hive.service.cli.HiveSQLException;
-import org.apache.hive.service.cli.session.SessionManager;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TProtocolFactory;
 import org.apache.thrift.server.TServlet;
@@ -66,6 +63,8 @@ import org.ietf.jgss.GSSName;
 import org.ietf.jgss.Oid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.livy.thriftserver.SessionInfo;
 
 /**
  *
@@ -168,27 +167,27 @@ public class ThriftHttpServlet extends TServlet {
       LOG.debug("Client username: " + clientUserName);
 
       // Set the thread local username to be used for doAs if true
-      SessionManager.setUserName(clientUserName);
+      SessionInfo.setUserName(clientUserName);
 
       // find proxy user if any from query param
       String doAsQueryParam = getDoAsQueryParam(request.getQueryString());
       if (doAsQueryParam != null) {
-        SessionManager.setProxyUserName(doAsQueryParam);
+        SessionInfo.setProxyUserName(doAsQueryParam);
       }
 
       clientIpAddress = request.getRemoteAddr();
       LOG.debug("Client IP Address: " + clientIpAddress);
       // Set the thread local ip address
-      SessionManager.setIpAddress(clientIpAddress);
+      SessionInfo.setIpAddress(clientIpAddress);
 
       // get forwarded hosts address
       String forwarded_for = request.getHeader(X_FORWARDED_FOR);
       if (forwarded_for != null) {
         LOG.debug("{}:{}", X_FORWARDED_FOR, forwarded_for);
         List<String> forwardedAddresses = Arrays.asList(forwarded_for.split(","));
-        SessionManager.setForwardedAddresses(forwardedAddresses);
+        SessionInfo.setForwardedAddresses(forwardedAddresses);
       } else {
-        SessionManager.setForwardedAddresses(Collections.<String>emptyList());
+        SessionInfo.setForwardedAddresses(Collections.<String>emptyList());
       }
 
       // Generate new cookie and add it to the response
@@ -217,10 +216,10 @@ public class ThriftHttpServlet extends TServlet {
     }
     finally {
       // Clear the thread locals
-      SessionManager.clearUserName();
-      SessionManager.clearIpAddress();
-      SessionManager.clearProxyUserName();
-      SessionManager.clearForwardedAddresses();
+      SessionInfo.clearUserName();
+      SessionInfo.clearIpAddress();
+      SessionInfo.clearProxyUserName();
+      SessionInfo.clearForwardedAddresses();
     }
   }
 

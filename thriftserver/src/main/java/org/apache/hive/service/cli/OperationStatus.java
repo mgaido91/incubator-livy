@@ -65,7 +65,7 @@ public class OperationStatus {
     return operationException;
   }
 
-  void setJobProgressUpdate(JobProgressUpdate jobProgressUpdate){
+  public void setJobProgressUpdate(JobProgressUpdate jobProgressUpdate){
     this.jobProgressUpdate = jobProgressUpdate;
   }
 

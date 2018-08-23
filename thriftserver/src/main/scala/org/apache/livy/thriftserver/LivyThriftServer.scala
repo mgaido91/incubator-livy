@@ -116,7 +116,7 @@ class LivyThriftServer(
   }
 
   private[thriftserver] def getSessionManager(): LivyThriftSessionManager = {
-    this.cliService.getSessionManager.asInstanceOf[LivyThriftSessionManager]
+    this.cliService.asInstanceOf[LivyCLIService].getSessionManager
   }
 
   def isAllowedToUse(user: String, session: InteractiveSession): Boolean = {

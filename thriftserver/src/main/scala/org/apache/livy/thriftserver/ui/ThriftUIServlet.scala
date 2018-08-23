@@ -65,13 +65,12 @@ class ThriftUIServlet(val basePath: String) extends BaseServlet with JacksonJson
   get("/sessions") { withContentType("json") {
     val thriftSessions = LivyThriftServer.getInstance.map { server =>
       val sessionManager = server.getSessionManager()
-      sessionManager.getSessions.asScala.map { session =>
-        val sessionHandle = session.getSessionHandle
-
+      sessionManager.getSessions.map { sessionHandle =>
+        val info = sessionManager.getSessionInfo(sessionHandle)
         SessionInfo(sessionHandle.getSessionId.toString,
           sessionManager.livySessionId(sessionHandle).map(_.toString).getOrElse(""),
-          session.getUserName,
-          df.format(session.getCreationTime))
+          info.username,
+          df.format(info.creationTime))
       }.toSeq
     }.getOrElse(Seq.empty)
     val from = params.get("from").map(_.toInt).getOrElse(0)

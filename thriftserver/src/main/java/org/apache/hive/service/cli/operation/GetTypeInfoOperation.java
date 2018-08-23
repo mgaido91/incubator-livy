@@ -21,16 +21,8 @@ package org.apache.hive.service.cli.operation;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
 import org.apache.hadoop.hive.serde2.thrift.Type;
-import org.apache.hive.service.cli.FetchOrientation;
-import org.apache.hive.service.cli.HiveSQLException;
-import org.apache.hive.service.cli.OperationState;
-import org.apache.hive.service.cli.OperationType;
-import org.apache.hive.service.cli.RowSet;
-import org.apache.hive.service.cli.RowSetFactory;
-import org.apache.hive.service.cli.TableSchema;
-import org.apache.hive.service.cli.session.HiveSession;
+import org.apache.hive.service.cli.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,8 +74,8 @@ public class GetTypeInfoOperation extends MetadataOperation {
 
   private final RowSet rowSet;
 
-  protected GetTypeInfoOperation(HiveSession parentSession) {
-    super(parentSession, OperationType.GET_TYPE_INFO);
+  public GetTypeInfoOperation(SessionHandle sessionHandle) {
+    super(sessionHandle, OperationType.GET_TYPE_INFO);
     rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
     LOG.info("Starting GetTypeInfoOperation");
   }
@@ -92,9 +84,6 @@ public class GetTypeInfoOperation extends MetadataOperation {
   public void runInternal() throws HiveSQLException {
     setState(OperationState.RUNNING);
     LOG.info("Fetching type info metadata");
-    if (isAuthV2Enabled()) {
-      authorizeMetaGets(HiveOperationType.GET_TYPEINFO, null);
-    }
     try {
       for (Type type : Type.values()) {
         Object[] rowData = new Object[] {

@@ -18,21 +18,12 @@
 
 package org.apache.hive.service.cli.operation;
 
-import java.util.List;
-
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveAccessControlException;
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveAuthzContext;
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveAuthzPluginException;
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject;
-import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hive.service.cli.ColumnDescriptor;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.OperationState;
 import org.apache.hive.service.cli.OperationType;
+import org.apache.hive.service.cli.SessionHandle;
 import org.apache.hive.service.cli.TableSchema;
-import org.apache.hive.service.cli.session.HiveSession;
 
 /**
  * MetadataOperation.
@@ -41,11 +32,9 @@ import org.apache.hive.service.cli.session.HiveSession;
 public abstract class MetadataOperation extends Operation {
 
   protected static final String DEFAULT_HIVE_CATALOG = "";
-  protected static TableSchema RESULT_SET_SCHEMA;
-  private static final char SEARCH_STRING_ESCAPE = '\\';
 
-  protected MetadataOperation(HiveSession parentSession, OperationType opType) {
-    super(parentSession, opType);
+  protected MetadataOperation(SessionHandle sessionHandle, OperationType opType) {
+    super(sessionHandle, opType);
     setHasResultSet(true);
   }
 
@@ -56,7 +45,6 @@ public abstract class MetadataOperation extends Operation {
   @Override
   public void close() throws HiveSQLException {
     setState(OperationState.CLOSED);
-    cleanupOperationLog();
   }
 
   /**
@@ -118,32 +106,6 @@ public abstract class MetadataOperation extends Operation {
         return replaced;
       }
       input = replaced;
-    }
-  }
-
-  protected boolean isAuthV2Enabled(){
-    SessionState ss = SessionState.get();
-    return (ss.isAuthorizationModeV2() &&
-        HiveConf.getBoolVar(ss.getConf(), HiveConf.ConfVars.HIVE_AUTHORIZATION_ENABLED));
-  }
-
-  protected void authorizeMetaGets(HiveOperationType opType, List<HivePrivilegeObject> inpObjs)
-      throws HiveSQLException {
-    authorizeMetaGets(opType, inpObjs, null);
-  }
-
-  protected void authorizeMetaGets(HiveOperationType opType, List<HivePrivilegeObject> inpObjs,
-      String cmdString) throws HiveSQLException {
-    SessionState ss = SessionState.get();
-    HiveAuthzContext.Builder ctxBuilder = new HiveAuthzContext.Builder();
-    ctxBuilder.setUserIpAddress(ss.getUserIpAddress());
-    ctxBuilder.setForwardedAddresses(ss.getForwardedAddresses());
-    ctxBuilder.setCommandString(cmdString);
-    try {
-      ss.getAuthorizerV2().checkPrivileges(opType, inpObjs, null,
-          ctxBuilder.build());
-    } catch (HiveAuthzPluginException | HiveAccessControlException e) {
-      throw new HiveSQLException(e.getMessage(), e);
     }
   }
 

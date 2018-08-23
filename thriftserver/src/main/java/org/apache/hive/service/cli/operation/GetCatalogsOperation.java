@@ -21,15 +21,7 @@ package org.apache.hive.service.cli.operation;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
-import org.apache.hive.service.cli.FetchOrientation;
-import org.apache.hive.service.cli.HiveSQLException;
-import org.apache.hive.service.cli.OperationState;
-import org.apache.hive.service.cli.OperationType;
-import org.apache.hive.service.cli.RowSet;
-import org.apache.hive.service.cli.RowSetFactory;
-import org.apache.hive.service.cli.TableSchema;
-import org.apache.hive.service.cli.session.HiveSession;
+import org.apache.hive.service.cli.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,8 +38,8 @@ public class GetCatalogsOperation extends MetadataOperation {
 
   private final RowSet rowSet;
 
-  protected GetCatalogsOperation(HiveSession parentSession) {
-    super(parentSession, OperationType.GET_CATALOGS);
+  public GetCatalogsOperation(SessionHandle sessionHandle) {
+    super(sessionHandle, OperationType.GET_CATALOGS);
     rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
     LOG.info("Starting GetCatalogsOperation");
   }
@@ -56,9 +48,7 @@ public class GetCatalogsOperation extends MetadataOperation {
   public void runInternal() throws HiveSQLException {
     setState(OperationState.RUNNING);
     try {
-      if (isAuthV2Enabled()) {
-        authorizeMetaGets(HiveOperationType.GET_CATALOGS, null);
-      }
+      // catalogs are actually not supported in hive, so this is a no-op
       setState(OperationState.FINISHED);
       LOG.info("Fetching catalog metadata has been successfully finished");
     } catch (HiveSQLException e) {

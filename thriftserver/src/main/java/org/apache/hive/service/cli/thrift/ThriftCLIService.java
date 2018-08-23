@@ -20,7 +20,6 @@ package org.apache.hive.service.cli.thrift;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-import org.apache.hive.service.cli.OperationState;
 import org.apache.hive.service.rpc.thrift.TSetClientInfoReq;
 import org.apache.hive.service.rpc.thrift.TSetClientInfoResp;
 
@@ -32,10 +31,8 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import javax.security.auth.login.LoginException;
 import org.apache.hadoop.hive.common.ServerUtils;
-import org.apache.hadoop.hive.common.log.ProgressMonitor;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.shims.HadoopShims.KerberosNameShim;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hive.service.AbstractService;
@@ -44,12 +41,12 @@ import org.apache.hive.service.ServiceUtils;
 import org.apache.hive.service.auth.HiveAuthConstants;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.auth.TSetIpAddressProcessor;
-import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.cli.FetchOrientation;
 import org.apache.hive.service.cli.FetchType;
 import org.apache.hive.service.cli.GetInfoType;
 import org.apache.hive.service.cli.GetInfoValue;
 import org.apache.hive.service.cli.HiveSQLException;
+import org.apache.hive.service.cli.ICLIService;
 import org.apache.hive.service.cli.JobProgressUpdate;
 import org.apache.hive.service.cli.OperationHandle;
 import org.apache.hive.service.cli.OperationStatus;
@@ -58,9 +55,6 @@ import org.apache.hive.service.cli.ProgressMonitorStatusMapper;
 import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.SessionHandle;
 import org.apache.hive.service.cli.TableSchema;
-import org.apache.hive.service.cli.TezProgressMonitorStatusMapper;
-import org.apache.hive.service.cli.operation.Operation;
-import org.apache.hive.service.cli.session.SessionManager;
 import org.apache.hive.service.rpc.thrift.TCLIService;
 import org.apache.hive.service.rpc.thrift.TCancelDelegationTokenReq;
 import org.apache.hive.service.rpc.thrift.TCancelDelegationTokenResp;
@@ -114,9 +108,11 @@ import org.apache.hive.service.rpc.thrift.TStatusCode;
 import org.apache.hive.service.server.HiveServer2;
 import org.apache.thrift.TException;
 import org.apache.thrift.server.ServerContext;
-import org.apache.thrift.server.TServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.livy.thriftserver.LivyCLIService;
+import org.apache.livy.thriftserver.SessionInfo;
 
 
 /**
@@ -127,7 +123,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
 
   public static final Logger LOG = LoggerFactory.getLogger(ThriftCLIService.class.getName());
 
-  protected CLIService cliService;
+  protected ICLIService cliService;
   private static final TStatus OK_STATUS = new TStatus(TStatusCode.SUCCESS_STATUS);
   protected static HiveAuthFactory hiveAuthFactory;
 
@@ -158,7 +154,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     }
   }
 
-  public ThriftCLIService(CLIService service, String serviceName) {
+  public ThriftCLIService(ICLIService service, String serviceName) {
     super(serviceName);
     this.cliService = service;
     currentServerContext = new ThreadLocal<ServerContext>();
@@ -324,12 +320,11 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       resp.setSessionHandle(sessionHandle.toTSessionHandle());
       Map<String, String> configurationMap = new HashMap<String, String>();
       // Set the updated fetch size from the server into the configuration map for the client
-      HiveConf sessionConf = cliService.getSessionConf(sessionHandle);
+      String defaultFetchSize = Integer.toString(
+          hiveConf.getIntVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_DEFAULT_FETCH_SIZE));
       configurationMap.put(
         HiveConf.ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_DEFAULT_FETCH_SIZE.varname,
-        Integer.toString(sessionConf != null ?
-          sessionConf.getIntVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_DEFAULT_FETCH_SIZE) :
-          hiveConf.getIntVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_DEFAULT_FETCH_SIZE)));
+          defaultFetchSize);
       resp.setConfiguration(configurationMap);
       resp.setStatus(OK_STATUS);
       ThriftCLIServerContext context =
@@ -380,9 +375,9 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     String clientIpAddress;
     // Http transport mode.
     // We set the thread local ip address, in ThriftHttpServlet.
-    if (cliService.getHiveConf().getVar(
+    if (hiveConf.getVar(
         ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
-      clientIpAddress = SessionManager.getIpAddress();
+      clientIpAddress = SessionInfo.getIpAddress();
     }
     else {
       if (hiveAuthFactory != null && hiveAuthFactory.isSASLWithKerberizedHadoop()) {
@@ -419,9 +414,9 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     }
     // Http transport mode.
     // We set the thread local username, in ThriftHttpServlet.
-    if (cliService.getHiveConf().getVar(
+    if (hiveConf.getVar(
         ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
-      userName = SessionManager.getUserName();
+      userName = SessionInfo.getUserName();
     }
     if (userName == null) {
       userName = req.getUsername();
@@ -464,16 +459,16 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       throws HiveSQLException, LoginException, IOException {
     String userName = getUserName(req);
     String ipAddress = getIpAddress();
-    TProtocolVersion protocol = getMinVersion(CLIService.SERVER_VERSION,
+    TProtocolVersion protocol = getMinVersion(LivyCLIService.SERVER_VERSION(),
         req.getClient_protocol());
     SessionHandle sessionHandle;
-    if (cliService.getHiveConf().getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
+    if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
         (userName != null)) {
-      sessionHandle = cliService.openSessionWithImpersonation(protocol, userName,
-          req.getPassword(), ipAddress, req.getConfiguration(), null);
+      sessionHandle = ((LivyCLIService) cliService).openSessionWithImpersonation(protocol,
+          userName, req.getPassword(), ipAddress, req.getConfiguration(), null);
     } else {
-      sessionHandle = cliService.openSession(protocol, userName, req.getPassword(),
-          ipAddress, req.getConfiguration());
+      sessionHandle = ((LivyCLIService) cliService).openSession(protocol, userName,
+          req.getPassword(), ipAddress, req.getConfiguration());
     }
     res.setServerProtocolVersion(protocol);
     return sessionHandle;
@@ -481,10 +476,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
 
   private double getProgressedPercentage(OperationHandle opHandle) throws HiveSQLException {
     checkArgument(OperationType.EXECUTE_STATEMENT.equals(opHandle.getOperationType()));
-    Operation operation = cliService.getSessionManager().getOperationManager().getOperation(opHandle);
-    SessionState state = operation.getParentSession().getSessionState();
-    ProgressMonitor monitor = state.getProgressMonitor();
-    return monitor == null ? 0.0 : monitor.progressedPercentage();
+    return 0.0;
   }
 
   private TProtocolVersion getMinVersion(TProtocolVersion... versions) {
@@ -688,9 +680,6 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       resp.setHasResultSet(operationStatus.getHasResultSet());
       JobProgressUpdate progressUpdate = operationStatus.jobProgressUpdate();
       ProgressMonitorStatusMapper mapper = ProgressMonitorStatusMapper.DEFAULT;
-      if ("tez".equals(hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE))) {
-        mapper = new TezProgressMonitorStatusMapper();
-      }
 
       TJobExecutionStatus executionStatus =
           mapper.forStatus(progressUpdate.status);
@@ -848,9 +837,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     String proxyUser = null;
     // Http transport mode.
     // We set the thread local proxy username, in ThriftHttpServlet.
-    if (cliService.getHiveConf().getVar(
-        ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
-      proxyUser = SessionManager.getProxyUserName();
+    if (hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
+      proxyUser = SessionInfo.getProxyUserName();
       LOG.debug("Proxy user from query string: " + proxyUser);
     }
 
