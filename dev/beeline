@@ -37,25 +37,12 @@ else
   exit 1
 fi
 
-LIBDIR="$LIVY_HOME/jars"
-if [ ! -d "$LIBDIR" ]; then
-  LIBDIR="$LIVY_HOME/thriftserver/target/jars"
-fi
+
+LIBDIR="$LIVY_HOME/thriftserver/client/target/jars"
+
 if [ ! -d "$LIBDIR" ]; then
   echo "Could not find Livy jars directory." 1>&2
   exit 1
 fi
 
-LIVY_CLASSPATH="$LIBDIR/*:$LIVY_CONF_DIR"
-
-if [ -n "$SPARK_CONF_DIR" ]; then
-  LIVY_CLASSPATH="$LIVY_CLASSPATH:$SPARK_CONF_DIR"
-fi
-if [ -n "$HADOOP_CONF_DIR" ]; then
-  LIVY_CLASSPATH="$LIVY_CLASSPATH:$HADOOP_CONF_DIR"
-fi
-if [ -n "$YARN_CONF_DIR" ]; then
-  LIVY_CLASSPATH="$LIVY_CLASSPATH:$YARN_CONF_DIR"
-fi
-
-exec $RUNNER $BEELINE_JAVA_OPTS -cp $LIVY_CLASSPATH:$CLASSPATH $CLASS "$@"
+exec $RUNNER $BEELINE_JAVA_OPTS -cp $LIBDIR/*:$LIVY_CONF_DIR:$CLASSPATH $CLASS "$@"

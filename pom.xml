@@ -83,6 +83,7 @@
     <spark.scala-2.11.version>1.6.2</spark.scala-2.11.version>
     <spark.scala-2.10.version>1.6.2</spark.scala-2.10.version>
     <spark.version>${spark.scala-2.11.version}</spark.version>
+    <hive.version>3.0.0</hive.version>
     <commons-codec.version>1.9</commons-codec.version>
     <guava.version>15.0</guava.version>
     <httpclient.version>4.5.3</httpclient.version>
@@ -1081,7 +1082,8 @@
     <profile>
       <id>thriftserver</id>
       <modules>
-        <module>thriftserver</module>
+        <module>thriftserver/server</module>
+        <module>thriftserver/client</module>
       </modules>
       <properties>
         <jetty.version>9.3.8.v20160314</jetty.version>
