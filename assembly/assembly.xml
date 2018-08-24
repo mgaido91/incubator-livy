@@ -76,7 +76,7 @@
       </includes>
     </fileSet>
     <fileSet>
-      <directory>${project.parent.basedir}/thriftserver/target/jars</directory>
+      <directory>${project.parent.basedir}/thriftserver/server/target/jars</directory>
       <outputDirectory>${assembly.name}/jars</outputDirectory>
       <includes>
         <include>*</include>
