@@ -68,7 +68,7 @@ abstract class ThriftServerBaseTest extends FunSuite with BeforeAndAfterAll {
     val thriftserverJarName = s"livy-thriftserver-${LIVY_VERSION}.jar"
     val thriftserverJarFile = Option(new File(home, s"jars/$thriftserverJarName"))
       .filter(_.exists())
-      .getOrElse(new File(home, s"thriftserver/target/jars/$thriftserverJarName"))
+      .getOrElse(new File(home, s"thriftserver/server/target/jars/$thriftserverJarName"))
     livyConf.set(LivyConf.THRIFT_SERVER_JAR_LOCATION, thriftserverJarFile.getAbsolutePath)
     livyConf.set(LivyConf.LOCAL_FS_WHITELIST, thriftserverJarFile.getParent)
 
