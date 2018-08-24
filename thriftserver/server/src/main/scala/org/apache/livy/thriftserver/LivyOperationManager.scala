@@ -109,7 +109,8 @@ class LivyOperationManager(val livyThriftSessionManager: LivyThriftSessionManage
       orientation: FetchOrientation,
       maxRows: Long): RowSet = {
     val tableSchema = new TableSchema(LivyOperationManager.LOG_SCHEMA)
-    val logs = RowSetFactory.create(tableSchema, getOperation(opHandle).getProtocolVersion, false)
+    val session = livyThriftSessionManager.getSessionInfo(getOperation(opHandle).getSessionHandle)
+    val logs = RowSetFactory.create(tableSchema, session.protocolVersion, false)
 
     if (!livyThriftSessionManager.getHiveConf.getBoolVar(
         ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {

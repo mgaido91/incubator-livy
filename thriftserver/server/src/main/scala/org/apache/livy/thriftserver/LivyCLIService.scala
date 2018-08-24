@@ -106,7 +106,7 @@ class LivyCLIService(server: LivyThriftServer)
       password: String,
       ipAddress: String,
       configuration: util.Map[String, String]): SessionHandle = {
-    val sessionHandle: SessionHandle = sessionManager.openSession(
+    val sessionHandle = sessionManager.openSession(
       protocol, username, password, ipAddress, configuration, false, null)
     debug(sessionHandle + ": openSession()")
     sessionHandle
@@ -119,7 +119,7 @@ class LivyCLIService(server: LivyThriftServer)
       ipAddress: String,
       configuration: util.Map[String, String],
       delegationToken: String): SessionHandle = {
-    val sessionHandle: SessionHandle = sessionManager.openSession(
+    val sessionHandle = sessionManager.openSession(
       protocol, username, password, ipAddress, configuration, true, delegationToken)
     debug(sessionHandle + ": openSession()")
     sessionHandle
@@ -129,7 +129,7 @@ class LivyCLIService(server: LivyThriftServer)
   override def openSession(username: String,
       password: String,
       configuration: util.Map[String, String]): SessionHandle = {
-    val sessionHandle: SessionHandle = sessionManager.openSession(
+    val sessionHandle = sessionManager.openSession(
       SERVER_VERSION, username, password, null, configuration, false, null)
     debug(sessionHandle + ": openSession()")
     sessionHandle
@@ -139,7 +139,7 @@ class LivyCLIService(server: LivyThriftServer)
   override def openSessionWithImpersonation(username: String,
       password: String,
       configuration: util.Map[String, String], delegationToken: String): SessionHandle = {
-    val sessionHandle: SessionHandle = sessionManager.openSession(
+    val sessionHandle = sessionManager.openSession(
       SERVER_VERSION, username, password, null, configuration, true, delegationToken)
     debug(sessionHandle + ": openSession()")
     sessionHandle
