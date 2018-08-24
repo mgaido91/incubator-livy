@@ -109,22 +109,13 @@ class BinaryThriftServerSuite extends ThriftServerBaseTest with CommonThriftTest
   }
 
   test("support hivevar") {
+    assume(hiveSupportEnabled(formattedSparkVersion._1, livyConf))
     withJdbcConnection(jdbcUri("default") + "#myVar1=val1;myVar2=val2") { c =>
       val statement = c.createStatement()
-      val myVar1Res = statement.executeQuery("set hivevar:myVar1")
-      myVar1Res.next()
-      assert(myVar1Res.getString(1) === "hivevar:myVar1")
-      assert(myVar1Res.getString(2) === "val1")
-      val myVar2Res = statement.executeQuery("set hivevar:myVar2")
-      myVar2Res.next()
-      assert(myVar2Res.getString(1) === "hivevar:myVar2")
-      assert(myVar2Res.getString(2) === "val2")
-      if (hiveSupportEnabled(formattedSparkVersion._1, livyConf)) {
-        val selectRes = statement.executeQuery("select \"${myVar1}\", \"${myVar2}\"")
-        selectRes.next()
-        assert(selectRes.getString(1) === "val1")
-        assert(selectRes.getString(2) === "val2")
-      }
+      val selectRes = statement.executeQuery("select \"${myVar1}\", \"${myVar2}\"")
+      selectRes.next()
+      assert(selectRes.getString(1) === "val1")
+      assert(selectRes.getString(2) === "val2")
       statement.close()
     }
   }
