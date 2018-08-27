@@ -17,10 +17,6 @@
 
 package org.apache.livy.thriftserver
 
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hive.service.server.HiveServer2
 import org.scalatra.ScalatraServlet
 
 import org.apache.livy.{LivyConf, Logging}
@@ -28,6 +24,7 @@ import org.apache.livy.server.AccessManager
 import org.apache.livy.server.interactive.InteractiveSession
 import org.apache.livy.server.recovery.SessionStore
 import org.apache.livy.sessions.InteractiveSessionManager
+import org.apache.livy.thriftserver.cli.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.livy.thriftserver.ui.ThriftUIServlet
 
 /**
@@ -39,21 +36,6 @@ object LivyThriftServer extends Logging {
   // Visible for testing
   private[thriftserver] var thriftServerThread: Thread = _
   private var thriftServer: LivyThriftServer = _
-
-  private def hiveConf(livyConf: LivyConf): HiveConf = {
-    val conf = new HiveConf()
-    // Remove all configs coming from hive-site.xml which may be in the classpath for the Spark
-    // applications to run.
-    conf.getAllProperties.asScala.filter(_._1.startsWith("hive.")).foreach { case (key, _) =>
-      conf.unset(key)
-    }
-    livyConf.asScala.foreach {
-      case nameAndValue if nameAndValue.getKey.startsWith("livy.hive") =>
-        conf.set(nameAndValue.getKey.stripPrefix("livy."), nameAndValue.getValue)
-      case _ => // Ignore
-    }
-    conf
-  }
 
   def start(
       livyConf: LivyConf,
@@ -70,7 +52,7 @@ object LivyThriftServer extends Logging {
               livySessionManager,
               sessionStore,
               accessManager)
-            thriftServer.init(hiveConf(livyConf))
+            thriftServer.init(livyConf)
             thriftServer.start()
             info("LivyThriftServer started")
           } catch {
@@ -102,24 +84,56 @@ object LivyThriftServer extends Logging {
     thriftServer.stop()
     thriftServer = null
   }
+
+  def isHTTPTransportMode(livyConf: LivyConf): Boolean = {
+    val transportMode = livyConf.get(LivyConf.THRIFT_TRANSPORT_MODE)
+    transportMode != null && transportMode.equalsIgnoreCase("http")
+  }
 }
 
 
 class LivyThriftServer(
-      private[thriftserver] val livyConf: LivyConf,
-      private[thriftserver] val livySessionManager: InteractiveSessionManager,
-      private[thriftserver] val sessionStore: SessionStore,
-      private val accessManager: AccessManager) extends HiveServer2 {
-  override def init(hiveConf: HiveConf): Unit = {
-    this.cliService = new LivyCLIService(this)
-    super.init(hiveConf)
+    private[thriftserver] val livyConf: LivyConf,
+    private[thriftserver] val livySessionManager: InteractiveSessionManager,
+    private[thriftserver] val sessionStore: SessionStore,
+    private val accessManager: AccessManager)
+  extends ThriftService(classOf[LivyThriftServer].getName) with Logging {
+
+  val cliService = new LivyCLIService(this)
+
+  override def init(livyConf: LivyConf): Unit = {
+    addService(cliService)
+    val server = this
+    val oomHook = new Runnable() {
+      override def run(): Unit = {
+        server.stop()
+      }
+    }
+    val thriftCLIService = if (LivyThriftServer.isHTTPTransportMode(livyConf)) {
+      new ThriftHttpCLIService(cliService, oomHook)
+    } else {
+      new ThriftBinaryCLIService(cliService, oomHook)
+    }
+    addService(thriftCLIService)
+    super.init(livyConf)
+    Runtime.getRuntime().addShutdownHook(new Thread("Livy Server Shutdown") {
+      override def run(): Unit = {
+        info("Shutting down Livy server.")
+        LivyThriftServer.this.stop()
+      }
+    })
   }
 
-  private[thriftserver] def getSessionManager(): LivyThriftSessionManager = {
+  private[thriftserver] def getSessionManager() = {
     this.cliService.asInstanceOf[LivyCLIService].getSessionManager
   }
 
   def isAllowedToUse(user: String, session: InteractiveSession): Boolean = {
     session.owner == user || accessManager.checkModifyPermissions(user)
+  }
+
+  override def stop(): Unit = {
+    info("Shutting down HiveServer2")
+    super.stop()
   }
 }

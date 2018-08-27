@@ -19,7 +19,6 @@ package org.apache.livy.thriftserver.ui
 
 import java.text.SimpleDateFormat
 
-import scala.collection.JavaConverters._
 import scala.xml.Node
 
 import org.json4s.{DefaultFormats, Formats}

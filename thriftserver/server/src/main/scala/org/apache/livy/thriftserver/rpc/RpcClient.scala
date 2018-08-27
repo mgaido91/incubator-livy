@@ -214,7 +214,7 @@ object RpcClient {
             row += sparkRow.getClass.getMethod("get", classOf[Int]).invoke(sparkRow, curCol)
             curCol += 1
           }
-          resultSet.addRow(row.toArray.asInstanceOf[Array[Object]])
+          resultSet.addRow(row.toArray)
           curRow += 1
         }
         resultSet

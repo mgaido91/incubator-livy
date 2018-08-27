@@ -20,7 +20,10 @@ package org.apache.livy.thriftserver.serde
 import java.nio.ByteBuffer
 import java.util
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
+
+import org.apache.hive.service.rpc.thrift._
 
 import org.apache.livy.thriftserver.types.{DataType, DataTypeUtils}
 
@@ -174,11 +177,44 @@ class ColumnBuffer(val dataType: DataType) {
     case "short" => shortVars.take(size)
     case "integer" => intVars.take(size)
     case "long" => longVars.take(size)
-    case "float" => doubleVars.take(size)
-    case "double" => doubleVars.take(size)
+    case "float" | "double" => doubleVars.take(size)
     case "binary" => binaryVars
     case _ => stringVars
   }
 
   private[thriftserver] def getNulls: util.BitSet = util.BitSet.valueOf(nulls.toBitMask)
+
+  def toTColumn: TColumn = {
+    val value = new TColumn
+    val nullsArray = new Array[Byte]((this.nulls.size + 7) / 8)
+    this.nulls.foreach { idx =>
+      nullsArray(idx / 8) = (nullsArray(idx / 8) | 1 << (idx % 8)).toByte
+    }
+    val nullMasks = ByteBuffer.wrap(nullsArray)
+    dataType.name match {
+      case "boolean" =>
+        val javaBooleans = boolVars.take(size).map(Boolean.box).toList.asJava
+        value.setBoolVal(new TBoolColumn(javaBooleans, nullMasks))
+      case "byte" =>
+        val javaBytes = byteVars.take(size).map(Byte.box).toList.asJava
+        value.setByteVal(new TByteColumn(javaBytes, nullMasks))
+      case "short" =>
+        val javaShorts = shortVars.take(size).map(Short.box).toList.asJava
+        value.setI16Val(new TI16Column(javaShorts, nullMasks))
+      case "integer" =>
+        val javaInts = intVars.take(size).map(Int.box).toList.asJava
+        value.setI32Val(new TI32Column(javaInts, nullMasks))
+      case "long" =>
+        val javaLongs = longVars.take(size).map(Long.box).toList.asJava
+        value.setI64Val(new TI64Column(javaLongs, nullMasks))
+      case "float" | "double" =>
+        val javaDoubles = doubleVars.take(size).map(Double.box).toList.asJava
+        value.setDoubleVal(new TDoubleColumn(javaDoubles, nullMasks))
+      case "binary" =>
+        value.setBinaryVal(new TBinaryColumn(this.binaryVars, nullMasks))
+      case _ =>
+        value.setStringVal(new TStringColumn(this.stringVars, nullMasks))
+    }
+    value
+  }
 }
