@@ -302,10 +302,6 @@ class LivyServer extends Logging {
     proc.waitFor() match {
       case 0 =>
         debug("Ran kinit command successfully.")
-        val ugi = UserGroupInformation.getCurrentUser
-        if (ugi.isFromKeytab) {
-          ugi.reloginFromTicketCache()
-        }
         kinitFailCount = 0
         true
       case _ =>

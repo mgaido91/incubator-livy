@@ -17,12 +17,9 @@
 
 package org.apache.livy.thriftserver
 
-import java.security.PrivilegedExceptionAction
-
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hive.service.server.HiveServer2
 import org.scalatra.ScalatraServlet
 
@@ -73,33 +70,8 @@ object LivyThriftServer extends Logging {
               livySessionManager,
               sessionStore,
               accessManager)
-            val conf = hiveConf(livyConf)
-            if (UserGroupInformation.isSecurityEnabled) {
-              val principal = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
-              val keyTabFile = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
-              if (principal.isEmpty || keyTabFile.isEmpty) {
-                throw new java.io.IOException(
-                  "HiveServer2 Kerberos principal or keytab is not correctly configured")
-              }
-              info("Attempting to login to the Kerberos" +
-                s" using principal: $principal and keytab: $keyTabFile")
-              val serverPrincipal = SecurityUtil.getServerPrincipal(principal, "0.0.0.0")
-              val originalUgi = UserGroupInformation.getCurrentUser
-              if (null == originalUgi || !originalUgi.isFromKeytab ||
-                  !originalUgi.getUserName.equals(principal)) {
-                UserGroupInformation.loginUserFromKeytab(serverPrincipal, keyTabFile)
-              }
-              val ugi = UserGroupInformation.getCurrentUser
-              ugi.doAs(new PrivilegedExceptionAction[Unit] {
-                override def run(): Unit = {
-                  thriftServer.init(conf)
-                  thriftServer.start()
-                }
-              })
-            } else {
-              thriftServer.init(conf)
-              thriftServer.start()
-            }
+            thriftServer.init(hiveConf(livyConf))
+            thriftServer.start()
             info("LivyThriftServer started")
           } catch {
             case e: Exception =>
