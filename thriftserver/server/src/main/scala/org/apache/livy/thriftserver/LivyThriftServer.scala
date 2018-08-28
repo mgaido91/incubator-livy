@@ -17,9 +17,12 @@
 
 package org.apache.livy.thriftserver
 
+import java.security.PrivilegedExceptionAction
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.server.HiveServer2
 import org.scalatra.ScalatraServlet
 
@@ -62,6 +65,7 @@ object LivyThriftServer extends Logging {
       accessManager: AccessManager): Unit = synchronized {
     if (thriftServerThread == null) {
       info("Starting LivyThriftServer")
+      val ugi = UserGroupInformation.getCurrentUser
       val runThriftServer = new Runnable {
         override def run(): Unit = {
           try {
@@ -70,8 +74,17 @@ object LivyThriftServer extends Logging {
               livySessionManager,
               sessionStore,
               accessManager)
-            thriftServer.init(hiveConf(livyConf))
-            thriftServer.start()
+            if (UserGroupInformation.isSecurityEnabled) {
+              ugi.doAs(new PrivilegedExceptionAction[Unit] {
+                override def run(): Unit = {
+                  thriftServer.init(hiveConf(livyConf))
+                  thriftServer.start()
+                }
+              })
+            } else {
+              thriftServer.init(hiveConf(livyConf))
+              thriftServer.start()
+            }
             info("LivyThriftServer started")
           } catch {
             case e: Exception =>

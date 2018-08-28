@@ -56,6 +56,8 @@ class LivyServer extends Logging {
   private var executor: ScheduledExecutorService = _
   private var accessManager: AccessManager = _
 
+  private var ugi: UserGroupInformation = _
+
   def start(): Unit = {
     livyConf = new LivyConf().loadFromFile("livy.conf")
     accessManager = new AccessManager(livyConf)
@@ -115,6 +117,10 @@ class LivyServer extends Logging {
         error("Failed to run kinit, stopping the server.")
         sys.exit(1)
       }
+      if (livyConf.getBoolean(LivyConf.THRIFT_SERVER_ENABLED)) {
+        UserGroupInformation.loginUserFromKeytab(launch_principal, launch_keytab)
+      }
+      ugi = UserGroupInformation.getCurrentUser
       startKinitThread(launch_keytab, launch_principal)
     }
 
@@ -318,6 +324,7 @@ class LivyServer extends Logging {
       new Runnable() {
         override def run(): Unit = {
           if (runKinit(keytab, principal)) {
+            ugi.reloginFromTicketCache()
             // schedule another kinit run with a fixed delay.
             executor.schedule(this, refreshInterval, TimeUnit.MILLISECONDS)
           } else {
