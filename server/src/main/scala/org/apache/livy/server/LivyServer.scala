@@ -117,6 +117,11 @@ class LivyServer extends Logging {
         error("Failed to run kinit, stopping the server.")
         sys.exit(1)
       }
+      // This is and it should be the only place where a login() on the UGI is performed. Any
+      // other login should be avoided as it would change the current UGI leading to potential
+      // very bad conditions which may vary from not finding valid Kerberos credentials to other
+      // issues. If an other login in the codebase is strictly needed, a needLogin check should
+      // be added in order to avoid anyway that 2 login are performed.
       if (livyConf.getBoolean(LivyConf.THRIFT_SERVER_ENABLED)) {
         UserGroupInformation.loginUserFromKeytab(launch_principal, launch_keytab)
       }
@@ -324,6 +329,11 @@ class LivyServer extends Logging {
       new Runnable() {
         override def run(): Unit = {
           if (runKinit(keytab, principal)) {
+            // The current UGI should never change. If that happens, it is an error condition and
+            // relogin the original UGI would not update the current UGI. So the server will fail
+            // due to no valid credentials. The assert here allows to fast detect this error
+            // condition and fail immediately with a meaningful error.
+            assert(ugi.equals(UserGroupInformation.getCurrentUser), "Current UGI has changed.")
             ugi.reloginFromTicketCache()
             // schedule another kinit run with a fixed delay.
             executor.schedule(this, refreshInterval, TimeUnit.MILLISECONDS)
