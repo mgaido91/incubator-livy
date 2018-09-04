@@ -77,13 +77,11 @@ object LivyThriftServer extends Logging {
             if (UserGroupInformation.isSecurityEnabled) {
               ugi.doAs(new PrivilegedExceptionAction[Unit] {
                 override def run(): Unit = {
-                  thriftServer.init(hiveConf(livyConf))
-                  thriftServer.start()
+                  doStart(livyConf)
                 }
               })
             } else {
-              thriftServer.init(hiveConf(livyConf))
-              thriftServer.start()
+              doStart(livyConf)
             }
             info("LivyThriftServer started")
           } catch {
@@ -98,6 +96,11 @@ object LivyThriftServer extends Logging {
     } else {
       error("Livy Thriftserver is already started")
     }
+  }
+  
+  private def doStart(livyConf: LivyConf): Unit = {
+    thriftServer.init(hiveConf(livyConf))
+    thriftServer.start()
   }
 
   private[thriftserver] def getInstance: Option[LivyThriftServer] = {
