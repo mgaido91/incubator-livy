@@ -97,7 +97,7 @@ object LivyThriftServer extends Logging {
       error("Livy Thriftserver is already started")
     }
   }
-  
+
   private def doStart(livyConf: LivyConf): Unit = {
     thriftServer.init(hiveConf(livyConf))
     thriftServer.start()
